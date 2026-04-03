@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999997 (MiKTeX 25.12) (preloaded format=xelatex 2026.3.26)  3 APR 2026 19:06
+This is XeTeX, Version 3.141592653-2.6-0.999997 (MiKTeX 25.12) (preloaded format=xelatex 2026.3.26)  3 APR 2026 22:28
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -584,7 +584,7 @@ File: l3backend-xetex.def 2025-10-09 L3 backend support: XeTeX
 \g__pdfannot_backend_int=\count351
 \g__pdfannot_backend_link_int=\count352
 )
-No file samplepaper.aux.
+(samplepaper.aux)
 \openout1 = `samplepaper.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 13.
@@ -605,7 +605,7 @@ LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 13.
 LaTeX Font Info:    ... okay on input line 13.
 LaTeX Font Info:    Trying to load font information for U+msa on input line 23.
 
-(D:\SoftWare\MiKTeX\tex/latex/amsfonts\umsa.fd
+ (D:\SoftWare\MiKTeX\tex/latex/amsfonts\umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
 LaTeX Font Info:    Trying to load font information for U+msb on input line 23.
@@ -613,154 +613,35 @@ LaTeX Font Info:    Trying to load font information for U+msb on input line 23.
 
 (D:\SoftWare\MiKTeX\tex/latex/amsfonts\umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
-)
-
-LaTeX Warning: Citation `xiao2024streaming' on page 1 undefined on input line 1
-02.
-
-
-LaTeX Warning: Citation `zhang2023h2o' on page 1 undefined on input line 102.
-
-
-LaTeX Warning: Citation `snapkv' on page 1 undefined on input line 102.
-
-
-LaTeX Warning: Citation `pyramidkv' on page 1 undefined on input line 102.
-
-
-LaTeX Warning: Citation `xu2025think' on page 1 undefined on input line 102.
-
-
-LaTeX Warning: Citation `lv2024kvpruner' on page 1 undefined on input line 102.
-
-
-
-LaTeX Warning: Citation `joo2025mustafar' on page 1 undefined on input line 102
-.
-
-
-LaTeX Warning: Citation `hooper2024kvquant' on page 1 undefined on input line 1
-02.
-
-
-LaTeX Warning: Citation `ashkboos2024quarot' on page 1 undefined on input line 
-102.
-
-
-LaTeX Warning: Citation `liu2024kivi' on page 1 undefined on input line 102.
-
-[1
+) [1
 
 ] [2]
-
-LaTeX Warning: Citation `snapkv' on page 3 undefined on input line 135.
-
-[3] [4]
-
-LaTeX Warning: Reference `sec:diff-sparsity' on page 5 undefined on input line 
-207.
-
-
-LaTeX Warning: Reference `fig:dual-window' on page 5 undefined on input line 20
-9.
-
-
-LaTeX Warning: Reference `sec:diff-sparsity' on page 5 undefined on input line 
-235.
-
-
-Overfull \hbox (9.41771pt too wide) in paragraph at lines 234--236
+File: figures/JSQKV_Overview.drawio.pdf Graphic file (type pdf)
+<use figures/JSQKV_Overview.drawio.pdf>
+ [3] [4] [5]
+Overfull \hbox (9.41771pt too wide) in paragraph at lines 244--246
 \T1/lmr/m/n/10 These nor-mal-ized scores are then com-pared against the same th
 resh-olds $\OT1/cmr/m/n/10 (\OML/cmm/m/it/10 ^^\[]; ^^\[]\OT1/cmr/m/n/10 )$
  []
 
-[5] [6]
-
-LaTeX Warning: Reference `fig:hadamard' on page 7 undefined on input line 452.
-
-
-LaTeX Warning: Reference `tab:hadamard_sparse_quant' on page 7 undefined on inp
-ut line 454.
-
+[6] [7]
 File: figures/hadamard_activation.pdf Graphic file (type pdf)
 <use figures/hadamard_activation.pdf>
-[7]
-
-LaTeX Warning: Reference `fig:sq-kernel-overview' on page 8 undefined on input 
-line 493.
-
+ [8]
 File: figures/bitmap_sparse_quant_format.pdf Graphic file (type pdf)
 <use figures/bitmap_sparse_quant_format.pdf>
 File: figures/bitmap_sparse_quant_operator.pdf Graphic file (type pdf)
 <use figures/bitmap_sparse_quant_operator.pdf>
+ [9]
 
-LaTeX Warning: Citation `dao2022flashattention' on page 8 undefined on input li
-ne 525.
+LaTeX Warning: Reference `sec:budget-config' on page 10 undefined on input line
+ 422.
 
-[8]
-
-LaTeX Warning: Citation `grattafiori2024llama3' on page 9 undefined on input li
-ne 527.
-
-
-LaTeX Warning: Citation `longbench' on page 9 undefined on input line 527.
-
-
-LaTeX Warning: Reference `sec:budget-config' on page 9 undefined on input line 
-530.
-
-
-LaTeX Warning: Reference `eq:budget_constraint' on page 9 undefined on input li
-ne 530.
-
-[9]
-
-LaTeX Warning: Citation `joo2025mustafar' on page 10 undefined on input line 53
-6.
-
-
-LaTeX Warning: Citation `liu2024kivi' on page 10 undefined on input line 536.
-
-
-LaTeX Warning: Reference `tab:diff-sparsity' on page 10 undefined on input line
- 541.
-
-
-LaTeX Warning: Reference `tab:main-accuracy' on page 10 undefined on input line
- 567.
-
-[10]
-
-LaTeX Warning: Reference `tab:cross-model' on page 11 undefined on input line 5
-92.
-
-
-LaTeX Warning: Reference `tab:throughput-table' on page 11 undefined on input l
-ine 615.
-
-
-LaTeX Warning: Reference `fig:throughput' on page 11 undefined on input line 61
-5.
-
-
-Overfull \hbox (4.00795pt too wide) in paragraph at lines 615--616
- \T1/lmr/m/it/10 End-to-end through-put.[] \T1/lmr/m/n/10 Ta-ble [] and Fig. []
- re-port end-to-end de-cod-ing through-
- []
-
+[10] [11]
 File: figures/throughput_llama3_bs.pdf Graphic file (type pdf)
 <use figures/throughput_llama3_bs.pdf>
-
-LaTeX Warning: Reference `tab:compression-summary' on page 11 undefined on inpu
-t line 647.
-
-[11]
-
-LaTeX Warning: Reference `tab:component-ablation' on page 12 undefined on input
- line 676.
-
-[12]
-Overfull \hbox (5.37659pt too wide) in paragraph at lines 733--734
+ [12]
+Overfull \hbox (5.37659pt too wide) in paragraph at lines 625--626
 \T1/lmr/m/n/10 Although JSQKV achieves a fa-vor-able accuracy-efficiency trade-
 off in long-context
  []
@@ -780,17 +661,14 @@ L3 programming layer <2025-12-29>
 
 LaTeX Warning: There were undefined references.
 
-
-LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
-
  ) 
 Here is how much of TeX's memory you used:
- 14253 strings out of 402987
- 283117 string characters out of 5453906
- 674578 words of memory out of 5000000
- 42708 multiletter control sequences out of 15000+600000
+ 14266 strings out of 402987
+ 283548 string characters out of 5453906
+ 671536 words of memory out of 5000000
+ 42718 multiletter control sequences out of 15000+600000
  674748 words of font info for 85 fonts, out of 8000000 for 9000
  1348 hyphenation exceptions out of 8191
- 84i,11n,104p,1235b,732s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 84i,11n,104p,1228b,732s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
 Output written on samplepaper.pdf (15 pages).

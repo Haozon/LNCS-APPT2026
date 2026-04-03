@@ -14,64 +14,68 @@
 \@writefile{toc}{\contentsline {author}{Anonymous Authors}{1}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{}\protected@file@percent }
 \newlabel{sec:intro}{{1}{1}{}{section.1}{}}
-\citation{snapkv}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Overview of JSQKV. The method first estimates token importance from prefill attention and instantiates a budgeted differential sparsity policy. It then extends this policy to autoregressive decoding through a dual-window online mechanism, represents retained KV states with Hadamard-based Per-Token-Tile quantization, and finally executes the compressed cache with a bitmap-based sparse-quant decode kernel to reduce memory traffic.}}{3}{}\protected@file@percent }
+\newlabel{fig:JSQKV-overview}{{1}{3}{}{figure.1}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {2}Method}{3}{}\protected@file@percent }
 \newlabel{sec:method}{{2}{3}{}{section.2}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Overview}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Budgeted Differential Sparsity Policy}{3}{}\protected@file@percent }
-\newlabel{sec:diff-sparsity}{{2.2}{3}{}{subsection.2.2}{}}
-\newlabel{eq:importance}{{1}{3}{}{equation.1}{}}
-\newlabel{eq:budget_constraint}{{8}{4}{}{equation.8}{}}
-\newlabel{eq:budget_solver}{{9}{4}{}{equation.9}{}}
+\citation{snapkv}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Budgeted Differential Sparsity Policy}{4}{}\protected@file@percent }
+\newlabel{sec:diff-sparsity}{{2.2}{4}{}{subsection.2.2}{}}
+\newlabel{eq:importance}{{1}{4}{}{equation.1}{}}
+\newlabel{eq:budget_constraint}{{8}{5}{}{equation.8}{}}
+\newlabel{eq:budget_solver}{{9}{5}{}{equation.9}{}}
 \newlabel{eq:calibration_objective}{{10}{5}{}{equation.10}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Dual-Window Online Execution for Decoding}{5}{}\protected@file@percent }
 \newlabel{sec:dual-window}{{2.3}{5}{}{subsection.2.3}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Dual-window online mechanism during decoding. Window A accumulates attention statistics before compression, while Window B collects newly generated tokens and provides future observations.}}{6}{}\protected@file@percent }
-\newlabel{fig:dual-window}{{1}{6}{}{figure.1}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Per-Token-Tile Quantization with Hadamard Rotation}{6}{}\protected@file@percent }
 \newlabel{sec:quant}{{2.4}{6}{}{subsection.2.4}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Key-state activation distribution before and after Hadamard rotation on a LLaMA2-7B sample. The rotation suppresses heavy tails while preserving enough variation for feature-level sparsification.}}{7}{}\protected@file@percent }
-\newlabel{fig:hadamard}{{2}{7}{}{figure.2}{}}
-\citation{dao2022flashattention}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Dual-window online mechanism during decoding. Window A accumulates attention statistics before compression, while Window B collects newly generated tokens and provides future observations.}}{7}{}\protected@file@percent }
+\newlabel{fig:dual-window}{{2}{7}{}{figure.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Key-state activation distribution before and after Hadamard rotation on a LLaMA2-7B sample. The rotation suppresses heavy tails while preserving enough variation for feature-level sparsification.}}{8}{}\protected@file@percent }
+\newlabel{fig:hadamard}{{3}{8}{}{figure.3}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces PPL of RTN and Hadamard rotation (\textit  {Rotate}) on WikiText-2 under quantization-only and sparse-quant settings. Hadamard rotation improves low-bit quantization stability, while remaining compatible with subsequent KV sparsification.}}{8}{}\protected@file@percent }
 \newlabel{tab:hadamard_sparse_quant}{{1}{8}{}{table.1}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.5}Sparse-Quant Format and Attention Kernel}{8}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.5}Sparse-Quant Format and Decode Kernel}{8}{}\protected@file@percent }
 \newlabel{sec:sparse-quant}{{2.5}{8}{}{subsection.2.5}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {3}Experiments}{8}{}\protected@file@percent }
-\newlabel{sec:experiments}{{3}{8}{}{section.3}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Experimental Setup}{8}{}\protected@file@percent }
+\citation{dao2022flashattention}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Overview of the sparse-quant format and attention kernel. The left panel shows the bitmap-based sparse-quant storage format. The right panel shows the decode pipeline that loads compressed tiles, performs unpacking and dequantization, reconstructs dense shared-memory tiles, and invokes Tensor Core matrix-vector computation.}}{9}{}\protected@file@percent }
+\newlabel{fig:sq-kernel-overview}{{4}{9}{}{figure.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Experiments}{9}{}\protected@file@percent }
+\newlabel{sec:experiments}{{3}{9}{}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Experimental Setup}{9}{}\protected@file@percent }
 \citation{grattafiori2024llama3}
 \citation{longbench}
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Overview of the sparse-quant format and attention kernel. The left panel shows the bitmap-based sparse-quant storage format. The right panel shows the decode pipeline that loads compressed tiles, performs unpacking and dequantization, reconstructs dense shared-memory tiles, and invokes Tensor Core matrix-vector computation.}}{9}{}\protected@file@percent }
-\newlabel{fig:sq-kernel-overview}{{3}{9}{}{figure.3}{}}
-\@writefile{toc}{\contentsline {paragraph}{Budget instantiation protocol.}{9}{}\protected@file@percent }
 \citation{joo2025mustafar}
 \citation{liu2024kivi}
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Differential sparsity versus uniform sparsity on selected LongBench tasks for Meta-Llama-3-8B.}}{10}{}\protected@file@percent }
-\newlabel{tab:diff-sparsity}{{2}{10}{}{table.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Accuracy Results}{10}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Differential sparsity alone.}{10}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Joint sparsity-quantization results.}{10}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Budget instantiation protocol.}{10}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Differential sparsity versus uniform sparsity on selected LongBench tasks for Meta-Llama-3-8B.}}{11}{}\protected@file@percent }
+\newlabel{tab:diff-sparsity}{{2}{11}{}{table.2}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Detailed LongBench results on Meta-Llama-3-8B. ``50/50'' and ``70/70'' denote target sparsity ratios for K and V caches.}}{11}{}\protected@file@percent }
 \newlabel{tab:main-accuracy}{{3}{11}{}{table.3}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Cross-model LongBench averages. ``M+K'' denotes the sequential MUSTAFAR+KIVI baseline.}}{11}{}\protected@file@percent }
-\newlabel{tab:cross-model}{{4}{11}{}{table.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Efficiency Results}{11}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{End-to-end throughput.}{11}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Compression overhead.}{11}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Accuracy Results}{11}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Differential sparsity alone.}{11}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Joint sparsity-quantization results.}{11}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Cross-model LongBench averages. ``M+K'' denotes the sequential MUSTAFAR+KIVI baseline.}}{12}{}\protected@file@percent }
+\newlabel{tab:cross-model}{{4}{12}{}{table.4}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces End-to-end throughput (tokens/s) on Meta-Llama-3-8B with 4096 input tokens and 256 output tokens.}}{12}{}\protected@file@percent }
 \newlabel{tab:throughput-table}{{5}{12}{}{table.5}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Representative compression overhead and KV cache size for Meta-Llama-3-8B (input length 4096). Compression ratio is original KV size divided by compressed KV size.}}{12}{}\protected@file@percent }
-\newlabel{tab:compression-summary}{{6}{12}{}{table.6}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Component Ablation}{12}{}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Representative end-to-end throughput on Meta-Llama-3-8B with 4096 input tokens and 256 output tokens. The compressed 70/70 + 2-bit path outperforms dense decoding in the small-to-medium batch regime.}}{13}{}\protected@file@percent }
-\newlabel{fig:throughput}{{4}{13}{}{figure.4}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Component ablation on Meta-Llama-3-8B under 70/70 sparsity and 2-bit quantization.}}{13}{}\protected@file@percent }
-\newlabel{tab:component-ablation}{{7}{13}{}{table.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Efficiency Results}{12}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{End-to-end throughput.}{12}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Compression overhead.}{12}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Representative end-to-end throughput on Meta-Llama-3-8B with 4096 input tokens and 256 output tokens. The compressed 70/70 + 2-bit path outperforms dense decoding in the small-to-medium batch regime.}}{13}{}\protected@file@percent }
+\newlabel{fig:throughput}{{5}{13}{}{figure.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Component Ablation}{13}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {4}Discussion and Future Work}{13}{}\protected@file@percent }
 \newlabel{sec:discussion}{{4}{13}{}{section.4}{}}
 \bibstyle{splncs04}
 \bibdata{refs}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Representative compression overhead and KV cache size for Meta-Llama-3-8B (input length 4096). Compression ratio is original KV size divided by compressed KV size.}}{14}{}\protected@file@percent }
+\newlabel{tab:compression-summary}{{6}{14}{}{table.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Component ablation on Meta-Llama-3-8B under 70/70 sparsity and 2-bit quantization.}}{14}{}\protected@file@percent }
+\newlabel{tab:component-ablation}{{7}{14}{}{table.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Conclusion}{14}{}\protected@file@percent }
+\newlabel{sec:conclusion}{{5}{14}{}{section.5}{}}
 \bibcite{ashkboos2024quarot}{1}
 \bibcite{longbench}{2}
 \bibcite{pyramidkv}{3}
@@ -80,8 +84,6 @@
 \bibcite{grattafiori2024llama3}{6}
 \bibcite{hooper2024kvquant}{7}
 \bibcite{joo2025mustafar}{8}
-\@writefile{toc}{\contentsline {section}{\numberline {5}Conclusion}{14}{}\protected@file@percent }
-\newlabel{sec:conclusion}{{5}{14}{}{section.5}{}}
 \bibcite{snapkv}{9}
 \bibcite{liu2024kivi}{10}
 \bibcite{lv2024kvpruner}{11}

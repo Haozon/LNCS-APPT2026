@@ -117,14 +117,24 @@ Experimental results show that \method achieves a favorable balance between mode
 
 \section{Method}
 \label{sec:method}
+
 \subsection{Overview}
 %%%%%%%%%%%%%%%%%%%%% 中文 %%%%%%%%%%%%%%%%%%
 % 在长上下文生成过程中，KV Cache 的存储占用与访存带宽开销会随着序列长度持续增长，并逐渐成为解码阶段的核心瓶颈。仅使用量化虽然可以压缩单个缓存元素的表示成本，但难以进一步减少实际需要保留的历史信息；仅使用稀疏化虽然能够降低缓存规模，但在高压缩率下又容易带来明显的精度退化。因此，我们提出 JSQKV，以联合方式组织稀疏与量化，在尽量保持模型性能稳定的前提下，同时降低 KV Cache 的容量开销与访问开销。
 % 具体而言，JSQKV 由四个相互衔接的部分组成。首先，我们根据历史 token 的注意力行为估计其相对重要性，并在固定平均压缩预算下执行差分稀疏分配，使重要 token 保留更多信息、次要 token 承担更高压缩率。其次，为了让这一策略能够工作在在线解码场景中，我们进一步引入双窗口机制，在 token 被正式压缩前持续累积后续注意力观测，从而获得更稳定的重要性判断。然后，对于保留下来的非零 KV 表示，我们设计与 token 级稀疏决策对齐的低比特表示方式，其中 Per-Token-Tile 量化用于细粒度控制量化误差，Hadamard transform 用于缓解 Key 中异常值对低比特量化稳定性的破坏。最后，我们设计 Bitmap-Based Sparse-Quant 数据格式及其配套运行时，使压缩后的 KV Cache 能够被高效加载与计算，真正将压缩收益转化为端到端的解码加速。
 
-We present JSQKV, a joint sparse-and-quantized KV-cache compression method for efficient LLM decoding. Instead of treating sparsity and quantization as two independent compression tools, JSQKV organizes them into a unified decode-stage pipeline that connects token-level compression decisions, online execution, low-bit representation, and runtime support. This design targets the two main costs of long-context KV caching: cache capacity and memory bandwidth.
+\begin{figure}[t]
+\centering
+\includegraphics[width=1\linewidth]{figures/JSQKV_Overview.drawio.pdf}
+\caption{Overview of JSQKV. The method first estimates token importance from prefill attention and instantiates a budgeted differential sparsity policy. It then extends this policy to autoregressive decoding through a dual-window online mechanism, represents retained KV states with Hadamard-based Per-Token-Tile quantization, and finally executes the compressed cache with a bitmap-based sparse-quant decode kernel to reduce memory traffic.}
+\label{fig:JSQKV-overview}
+\end{figure}
 
-Specifically, JSQKV first performs attention-guided differential sparsification to allocate different retention budgets across historical tokens. It then introduces a dual-window online mechanism to make this policy work in autoregressive decoding. After the sparsity decision is made, the retained KV states are represented with a token-aligned low-bit format, where Per-Token-Tile quantization controls local quantization error and the Hadamard transform improves robustness to key outliers. Finally, a bitmap-based sparse-quant format and its matching runtime convert the compressed representation into efficient loading and computation during decoding.
+Figure~\ref{fig:JSQKV-overview} summarizes the overall design of \method. Rather than applying sparsification and quantization as two independent post-processing steps, \method\ organizes them into a unified decode-stage pipeline in which token selection, online execution, low-bit representation, and runtime support are designed together.
+
+The method consists of four tightly coupled components. First, \method\ uses prefill attention to estimate token importance and instantiates a budgeted differential sparsity policy, so that different historical tokens receive different retention budgets under a fixed average compression target. Second, because future attention is unavailable when a token is first generated during decoding, \method\ introduces a dual-window online mechanism that delays compression until enough future evidence has been accumulated. Third, after token-level sparsity decisions are made, the retained KV states are stored in a token-aligned low-bit form using Hadamard-based Per-Token-Tile quantization, which improves robustness to key outliers while matching the downstream sparse-quant execution granularity. Finally, \method\ uses a bitmap-based sparse-quant format and a matching decode kernel to keep KV cache compact in memory and turn compression into reduced memory traffic and practical decode-time speedup.
+
+The remaining subsections describe these components in order. Section~\ref{sec:diff-sparsity} presents the budgeted differential sparsity policy, Section~\ref{sec:dual-window} introduces the dual-window online execution mechanism, Section~\ref{sec:quant} describes the token-aligned quantization design, and Section~\ref{sec:sparse-quant} presents the sparse-quant storage format and decode kernel.
 
 %%%%%%%%%%%%%%%%%%% 中文 %%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Budgeted Differential Sparsity Policy}
@@ -238,124 +248,6 @@ After the classification, \method\ applies the corresponding compression rule to
 
 % This mechanism extends the prefill-time differential sparsity policy to autoregressive decoding without requiring immediate compression decisions for newly generated tokens.
 
-
-% \begin{figure}[t]
-% \centering
-% \begin{tikzpicture}[
-% scale=0.95,
-% line width=0.7pt,
-% every node/.style={font=\footnotesize},
-% >=Latex
-% ]
-
-% % colors
-% \definecolor{dwbg}{RGB}{246,238,248}
-% \definecolor{dwpurple}{RGB}{120,80,150}
-% \definecolor{dwA}{RGB}{238,210,214}
-% \definecolor{dwB}{RGB}{210,225,245}
-% \definecolor{dwgray}{RGB}{230,230,230}
-% \definecolor{dwmid}{RGB}{193,170,212}
-
-% % outer panel
-% \draw[rounded corners=4pt, fill=dwbg, draw=dwpurple, thick] (0,0) rectangle (14,6.2);
-
-% % title
-% \node[font=\bfseries\large] at (7,5.7) {Dual-Window Online Decoding};
-
-% % subtitles
-% \node[align=left] at (3.0,4.95) {1. Window A: pending compression};
-% \node[align=left] at (3.2,4.5)  {2. Window B: future observation};
-% \node[align=left] at (2.55,4.05) {3. Reuse policy online};
-
-% % -------- Step 1 --------
-% \node[font=\bfseries] at (2.5,3.2) {1. Accumulate};
-% \node[font=\bfseries] at (2.5,2.8) {future attention};
-
-% % A strip
-% \foreach \i in {0,...,4}{
-%   \draw[fill=dwA, draw=dwpurple!70] (0.9+0.32*\i,2.1) rectangle (1.18+0.32*\i,2.45);
-% }
-% \node at (1.7,2.75) {\scriptsize Window A};
-
-% % B strip
-% \foreach \i in {0,...,4}{
-%   \draw[fill=dwB, draw=dwpurple!70] (2.2+0.32*\i,1.35) rectangle (2.48+0.32*\i,1.70);
-% }
-% \node at (3.0,1.95) {\scriptsize Window B};
-
-% % arrows B->A
-% \draw[->, thick] (2.35,1.72) .. controls (2.1,2.15) and (1.85,2.25) .. (1.65,2.42);
-% \draw[->, thick] (2.7,1.72) .. controls (2.45,2.10) and (2.05,2.22) .. (1.95,2.42);
-% \draw[->, thick] (3.0,1.72) .. controls (2.7,2.00) and (2.25,2.20) .. (2.25,2.42);
-
-% % Acc strip
-% \node at (1.95,0.95) {\scriptsize Acc};
-% \foreach \i/\h/\c in {0/0.18/dwgray,1/0.28/dwmid,2/0.40/dwpurple!55,3/0.33/dwmid,4/0.22/dwgray}{
-%   \draw[fill=\c, draw=dwpurple!60] (1.1+0.35*\i,0.45) rectangle (1.35+0.35*\i,0.45+\h);
-% }
-
-% % arrow to step2
-% \draw[->, thick] (4.2,2.0) -- (5.0,2.0);
-
-% % -------- Step 2 --------
-% \node[font=\bfseries] at (6.9,3.2) {2. Normalize};
-% \node[font=\bfseries] at (6.9,2.8) {attention statistics};
-
-% % before strip
-% \foreach \i/\h/\c in {0/0.18/dwgray,1/0.28/dwmid,2/0.40/dwpurple!55,3/0.33/dwmid,4/0.22/dwgray}{
-%   \draw[fill=\c, draw=dwpurple!60] (5.3+0.30*\i,1.55) rectangle (5.53+0.30*\i,1.55+\h);
-% }
-% \node at (6.0,1.15) {\scriptsize Acc};
-
-% % normalize arrow
-% \draw[->, thick] (6.95,1.8) -- (7.85,1.8);
-% \node at (7.4,2.15) {\scriptsize / $N^{(i)}$};
-
-% % normalized strip
-% \foreach \i/\c in {0/dwgray,1/dwmid,2/dwmid,3/dwpurple!45,4/dwmid}{
-%   \draw[fill=\c, draw=dwpurple!60] (8.2+0.32*\i,1.55) rectangle (8.48+0.32*\i,1.88);
-% }
-% \node at (9.0,1.15) {\scriptsize Normalized};
-
-% % arrow to step3
-% \draw[->, thick] (10.25,2.0) -- (11.05,2.0);
-
-% % -------- Step 3 --------
-% \node[font=\bfseries] at (12.3,3.2) {3. Classify};
-% \node[font=\bfseries] at (12.3,2.8) {and compress};
-
-% % classified strip
-% \draw[fill=dwpurple!70, draw=dwpurple!70] (11.1,1.55) rectangle (11.38,1.88);
-% \draw[fill=dwmid,       draw=dwpurple!70] (11.45,1.55) rectangle (11.73,1.88);
-% \draw[fill=dwmid,       draw=dwpurple!70] (11.80,1.55) rectangle (12.08,1.88);
-% \draw[fill=white,       draw=dwpurple!40] (12.15,1.55) rectangle (12.43,1.88);
-% \draw[fill=white,       draw=dwpurple!40] (12.50,1.55) rectangle (12.78,1.88);
-% \draw[red, very thick] (12.95,1.58) -- (13.20,1.84);
-% \draw[red, very thick] (12.95,1.84) -- (13.20,1.58);
-
-% \node at (11.25,1.15) {\scriptsize L0};
-% \node at (11.95,1.15) {\scriptsize L1};
-% \node at (12.63,1.15) {\scriptsize L2};
-
-% % bottom slide window
-% \node[font=\bfseries] at (2.0,0.15) {slide window};
-
-% \draw[fill=dwB, draw=dwpurple!70] (4.2,0.0) rectangle (6.1,0.45);
-% \node at (5.15,0.225) {A $\leftarrow$ old B};
-
-% \draw[->, thick] (6.4,0.225) -- (8.0,0.225);
-% \node at (7.2,0.52) {\scriptsize \ldots};
-
-% \draw[fill=dwmid!60, draw=dwpurple!70] (8.3,0.0) rectangle (10.25,0.45);
-% \node at (9.28,0.225) {A $\leftarrow$ old B};
-
-% \draw[fill=dwB!70, draw=dwpurple!50] (10.25,0.0) rectangle (10.65,0.45);
-% \draw[fill=dwB!35, draw=dwpurple!40] (10.65,0.0) rectangle (11.05,0.45);
-
-% \node[align=left] at (12.2,0.22) {B $\leftarrow$ new tokens};
-
-% \end{tikzpicture}
-% \end{figure}
 
 
 \begin{figure}[t]
@@ -485,7 +377,7 @@ Table~\ref{tab:hadamard_sparse_quant} further supports this observation quantita
     \end{tabular}
 \end{table}
 
-\subsection{Sparse-Quant Format and Attention Kernel}
+\subsection{Sparse-Quant Format and Decode Kernel}
 \label{sec:sparse-quant}
 
 Compression quality alone is not enough if the resulting representation cannot be executed efficiently at decode time. We therefore co-design a sparse-quant storage format and its matching attention kernel, so that the compressed KV cache not only reduces storage cost, but also translates into practical decoding speedup.
