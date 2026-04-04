@@ -3,3 +3,17 @@
 *.eps
 *.bbl
 *.log
+*.blg
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.out
+*.toc
+*.lof
+*.lot
+*.nav
+*.snm
+*.vrb
+*.bcf
+*.run.xml
+.codex_tmp/
