@@ -12,8 +12,8 @@
 
 \begin{document}
 
-\title{\method: Joint Sparsification and Quantization for KV Cache Compression and Decoding Acceleration}
-\titlerunning{\method\\: Joint Sparsification and Quantization for KV Cache Compression}
+\title{\method: Joint Sparsification and Quantization for KV-Cache Compression and Decode Acceleration}
+\titlerunning{\method\\: Joint Sparsification and Quantization for KV-Cache Compression}
 
 \author{Anonymous Authors}
 \authorrunning{Anonymous Authors}
@@ -21,6 +21,19 @@
 \institute{Draft prepared for APPT 2026 submission}
 
 \maketitle
+
+% KV cache
+% KV-cache compression
+% KV-cache footprint
+% decode acceleration
+% execution path
+% online execution mechanism
+% sparse-quant format
+% sparse-quant decode kernel
+% Per-Token-Tile quantization
+% Hadamard rotation
+% budgeted differential sparsity policy
+% token-level compression decisions
 
 \begin{abstract}
 
@@ -49,14 +62,14 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%% Polished %%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
 
 
-% To address this issue, we propose JSQKV, a joint sparse-quant framework for KV Cache compression and decode acceleration, which co-designs compression policy, numerical representation, and decode-time execution. Specifically, JSQKV constructs an attention-score-based differential sparsification strategy to allocate token-level sparsity budgets, introduces a dual-window online mechanism for the decoding stage, and further develops a Hadamard-based Per-Token-Tile quantization method together with a Bitmap-Based Sparse-Quant data format and corresponding decode kernels. These designs enable compressed KV Cache data to remain in a compact form while being effectively translated into reduced memory access and end-to-end acceleration.
+% To address this issue, we propose JSQKV, a joint sparse-quant framework for KV Cache compression and decode acceleration, which co-designs compression policy, numerical representation, and execution path. Specifically, JSQKV constructs an attention-score-based differential sparsification strategy to allocate token-level sparsity budgets, introduces a dual-window online mechanism for the decoding stage, and further develops a Hadamard-based Per-Token-Tile quantization method together with a Bitmap-Based Sparse-Quant data format and corresponding decode kernels. These designs enable compressed KV Cache data to remain in a compact form while being effectively translated into reduced memory access and end-to-end acceleration.
 
-As long-context large language models become increasingly widespread, autoregressive decoding is increasingly bottlenecked by KV Cache footprint and memory bandwidth. Existing KV Cache compression methods typically rely on sparsification or low-bit quantization, but simply combining the two often fails to simultaneously preserve model accuracy and deliver real system-level gains.
-We present JSQKV, a joint sparse-quant framework for KV Cache compression and decode acceleration that co-designs compression policy, numerical representation, and decode-time execution. JSQKV introduces an attention-score-based differential sparsification strategy with an online dual-window decoding mechanism, together with a Hadamard-based Per-Token-Tile quantization scheme and a Bitmap-Based Sparse-Quant data layout with corresponding decode kernels. This co-design enables compressed KV Cache data to remain compact in memory while being effectively translated into reduced memory traffic and end-to-end speedup.
-Experimental results show that, under the same compression budget, JSQKV consistently outperforms the sequential MUSTAFAR+KIVI baseline on LongBench. On Meta-Llama-3-8B, with input length 4096 and output length 256, JSQKV improves end-to-end throughput by 44.2\% over the dense baseline at batch size 4 using 70\% KV sparsity and 2-bit quantization, while increasing the KV Cache compression ratio to 3.48×. These results show that efficient KV Cache compression requires joint optimization across compression policy, numerical representation, and decode-time execution. Code is available at https://github.com/Haozon/JSQKV.
+As long-context large language models become increasingly widespread, autoregressive decoding is increasingly bottlenecked by KV-cache footprint and memory bandwidth. Existing KV-cache compression methods typically rely on sparsification or low-bit quantization, but simply combining the two often fails to simultaneously preserve model accuracy and deliver real system-level gains.
+We present JSQKV, a joint sparse-quant framework for KV-cache compression and decode acceleration that co-designs compression policy, numerical representation, and execution path. JSQKV introduces an attention-score-based differential sparsification strategy with a dual-window online execution mechanism, together with a Hadamard-based Per-Token-Tile quantization scheme and a bitmap-based sparse-quant format with a matching decode kernel. This co-design enables compressed KV-cache data to remain compact in memory while being effectively translated into reduced memory traffic and end-to-end speedup.
+Experimental results show that, under the same compression budget, JSQKV consistently outperforms the sequential MUSTAFAR+KIVI baseline on LongBench. On Meta-Llama-3-8B, with input length 4096 and output length 256, JSQKV improves end-to-end throughput by 44.2\% over the dense baseline at batch size 4 using 70\% KV sparsity and 2-bit quantization, while increasing the KV-cache compression ratio to 3.48$\times$. These results show that efficient KV-cache compression requires joint optimization across compression policy, numerical representation, and execution path. Code is available at https://github.com/Haozon/JSQKV.
 
 
-\keywords{KV cache compression \and Sparsity \and Quantization}
+\keywords{KV-cache compression \and Sparsity \and Quantization}
 \end{abstract}
 
 \section{Introduction}
@@ -93,7 +106,7 @@ Experimental results show that, under the same compression budget, JSQKV consist
 
 % Experimental results show that JSQKV can keep both model quality and system efficiency under high compression ratios. On Meta-Llama-3-8B, with 70% KV Cache sparsity and 2-bit quantization, JSQKV achieves about 44.2% higher end-to-end throughput than the dense baseline in a long-context decoding setting with batch size 4. This result shows that efficient KV Cache compression needs not only better compression algorithms, but also joint optimization across compression policy, numerical representation, and online execution mechanisms.
 
-As context windows continue to grow in large language models, autoregressive decoding is increasingly bottlenecked by KV cache footprint and memory bandwidth. KV cache memory grows linearly with context length, while decoding offers limited parallelism and repeatedly accessing the KV cache, making it more memory-bound than the prefill stage. In long-context settings, this bottleneck further limits throughput, batch size, and deployment efficiency.
+As context windows continue to grow in large language models, autoregressive decoding is increasingly bottlenecked by KV-cache footprint and memory bandwidth. The KV cache grows linearly with context length, while decoding offers limited parallelism and repeatedly accesses the KV cache, making it more memory-bound than the prefill stage. In long-context settings, this bottleneck further limits throughput, batch size, and deployment efficiency.
 
 
 
@@ -103,17 +116,17 @@ Prior work on KV-cache optimization mainly follows two directions. One line redu
 
 Overall, prior work shows that both sparsification and quantization are effective, but the two are still largely studied in isolation. In practice, joint compression is not a simple sequential combination: once sparsification changes the retained tokens and cache access pattern, the appropriate quantization granularity, compressed data layout, and decode-time kernel design also change. Without such co-design, algorithm-level compression gains may not reliably translate into practical end-to-end speedups.
 
-To address this issue, we propose \method, a joint sparse-quant framework for KV cache compression and decode acceleration. \method jointly designs compression policy, numerical representation, and online execution. The key idea is simple: allocate different compression budgets to different tokens according to their importance to future attention, compress the remaining KV states with a token-aligned and numerically stable low-bit representation, and keep the KV cache compressed in memory as much as possible until dense tiles are required by the decoding kernel. Through this joint design, \method keeps KV cache compact in memory while more effectively reducing memory traffic and improving end-to-end throughput.
+To address this issue, we propose \method, a joint sparse-quant framework for KV-cache compression and decode acceleration. \method\ jointly designs compression policy, numerical representation, and execution path. The key idea is simple: allocate different compression budgets to different tokens according to their importance to future attention, compress the remaining KV states with a token-aligned and numerically stable low-bit representation, and keep the KV cache compressed in memory as much as possible until dense tiles are required by the decode kernel. Through this joint design, \method\ keeps the KV cache compact in memory while more effectively reducing memory traffic and improving end-to-end throughput.
 
 The main contributions of this paper are as follows:
 \begin{itemize}
     \item We propose an attention-score-based differential sparsification policy that assigns different sparsity levels to different historical tokens at the token level, instead of applying a single global compression ratio.
     \item We design a dual-window online execution mechanism for autoregressive decoding, extending differential sparsification from the prefill stage to online decoding.
     \item We propose a Hadamard-based Per-Token-Tile quantization method to mitigate low-bit quantization instability caused by Key outliers and to better align quantization granularity with token-level compression decisions.
-    \item We design a Bitmap-Based Sparse-Quant data format and corresponding decoding kernels that keep compressed KV cache compact in memory and turn compression into reduced memory traffic and end-to-end decoding speedup.
+    \item We design a bitmap-based sparse-quant format and a matching decode kernel that keep the compressed KV cache compact in memory and turn compression into reduced memory traffic and end-to-end decoding speedup.
 \end{itemize}
 
-Experimental results show that \method achieves a favorable balance between model quality and system efficiency under high compression ratios. On Meta-Llama-3-8B, with 70\% KV cache sparsity and 2-bit quantization, \method improves end-to-end throughput by approximately 44.2\% over the dense baseline in a long-context decoding setting with batch size 4. These results show that efficient KV cache compression requires joint optimization across compression policy, numerical representation, and online execution.
+Experimental results show that \method\ achieves a favorable balance between model quality and system efficiency under high compression ratios. On Meta-Llama-3-8B, with 70\% KV cache sparsity and 2-bit quantization, \method\ improves end-to-end throughput by approximately 44.2\% over the dense baseline in a long-context decoding setting with batch size 4. These results show that efficient KV-cache compression requires joint optimization across compression policy, numerical representation, and execution path.
 
 \section{Method}
 \label{sec:method}
@@ -123,16 +136,19 @@ Experimental results show that \method achieves a favorable balance between mode
 % 在长上下文生成过程中，KV Cache 的存储占用与访存带宽开销会随着序列长度持续增长，并逐渐成为解码阶段的核心瓶颈。仅使用量化虽然可以压缩单个缓存元素的表示成本，但难以进一步减少实际需要保留的历史信息；仅使用稀疏化虽然能够降低缓存规模，但在高压缩率下又容易带来明显的精度退化。因此，我们提出 JSQKV，以联合方式组织稀疏与量化，在尽量保持模型性能稳定的前提下，同时降低 KV Cache 的容量开销与访问开销。
 % 具体而言，JSQKV 由四个相互衔接的部分组成。首先，我们根据历史 token 的注意力行为估计其相对重要性，并在固定平均压缩预算下执行差分稀疏分配，使重要 token 保留更多信息、次要 token 承担更高压缩率。其次，为了让这一策略能够工作在在线解码场景中，我们进一步引入双窗口机制，在 token 被正式压缩前持续累积后续注意力观测，从而获得更稳定的重要性判断。然后，对于保留下来的非零 KV 表示，我们设计与 token 级稀疏决策对齐的低比特表示方式，其中 Per-Token-Tile 量化用于细粒度控制量化误差，Hadamard transform 用于缓解 Key 中异常值对低比特量化稳定性的破坏。最后，我们设计 Bitmap-Based Sparse-Quant 数据格式及其配套运行时，使压缩后的 KV Cache 能够被高效加载与计算，真正将压缩收益转化为端到端的解码加速。
 
+
+
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=1\linewidth]{figures/JSQKV_Overview.drawio.pdf}
-\caption{Overview of JSQKV. The method first estimates token importance from prefill attention and instantiates a budgeted differential sparsity policy. It then extends this policy to autoregressive decoding through a dual-window online mechanism, represents retained KV states with Hadamard-based Per-Token-Tile quantization, and finally executes the compressed cache with a bitmap-based sparse-quant decode kernel to reduce memory traffic.}
+\caption{Overview of JSQKV. The method first estimates token importance from prefill attention and instantiates a budgeted differential sparsity policy. It then extends this policy to autoregressive decoding through a dual-window online execution mechanism, represents retained KV states with Hadamard-based Per-Token-Tile quantization, and finally executes the compressed cache with a bitmap-based sparse-quant decode kernel to reduce memory traffic.}
 \label{fig:JSQKV-overview}
 \end{figure}
 
-Figure~\ref{fig:JSQKV-overview} summarizes the overall design of \method. Rather than applying sparsification and quantization as two independent post-processing steps, \method\ organizes them into a unified decode-stage pipeline in which token selection, online execution, low-bit representation, and runtime support are designed together.
+Figure~\ref{fig:JSQKV-overview} summarizes the overall design of \method. Rather than applying sparsification and quantization as two independent post-processing steps, \method\ organizes them into a unified decode-stage pipeline in which the compression policy, low-bit representation, and execution path are designed together.
 
-The method consists of four tightly coupled components. First, \method\ uses prefill attention to estimate token importance and instantiates a budgeted differential sparsity policy, so that different historical tokens receive different retention budgets under a fixed average compression target. Second, because future attention is unavailable when a token is first generated during decoding, \method\ introduces a dual-window online mechanism that delays compression until enough future evidence has been accumulated. Third, after token-level sparsity decisions are made, the retained KV states are stored in a token-aligned low-bit form using Hadamard-based Per-Token-Tile quantization, which improves robustness to key outliers while matching the downstream sparse-quant execution granularity. Finally, \method\ uses a bitmap-based sparse-quant format and a matching decode kernel to keep KV cache compact in memory and turn compression into reduced memory traffic and practical decode-time speedup.
+The method consists of four tightly coupled components. First, \method\ uses prefill attention to estimate token importance and instantiates a budgeted differential sparsity policy, so that different historical tokens receive different retention budgets under a fixed average compression target. Second, because future attention is unavailable when a token is first generated during decoding, \method\ introduces a dual-window online execution mechanism that delays compression until enough future evidence has been accumulated. Third, after token-level compression decisions are made, the retained KV states are stored in a token-aligned low-bit form using Hadamard-based Per-Token-Tile quantization, which improves robustness to key outliers while matching the downstream sparse-quant execution granularity. Finally, \method\ uses a bitmap-based sparse-quant format and a matching decode kernel to keep the KV cache compact in memory and turn compression into reduced memory traffic and practical decode-time speedup.
 
 The remaining subsections describe these components in order. Section~\ref{sec:diff-sparsity} presents the budgeted differential sparsity policy, Section~\ref{sec:dual-window} introduces the dual-window online execution mechanism, Section~\ref{sec:quant} describes the token-aligned quantization design, and Section~\ref{sec:sparse-quant} presents the sparse-quant storage format and decode kernel.
 
@@ -211,10 +227,10 @@ where $\mathcal{C}(B)$ is the feasible candidate set under budget $B$. This proc
 % To instantiate \method\ under a target budget, we use a lightweight calibration solver.
 % Instead of exhaustively searching all possible triples, we search over a small feasible grid of $(p_0,\rho_1)$ pairs
 
-\subsection{Dual-Window Online Execution for Decoding}
+\subsection{Dual-Window Online Execution Mechanism}
 \label{sec:dual-window}
 
-The policy in Section~\ref{sec:diff-sparsity} relies on future attention observations that are available in prefill but unavailable when a token is first generated during decoding. As a result, the token-level compression policy cannot be applied immediately after a token is written into the KV cache. To make the same policy work online, \method\ introduces a dual-window mechanism that delays compression until each token has accumulated enough future attention evidence.
+The policy in Section~\ref{sec:diff-sparsity} relies on future attention observations that are available in prefill but unavailable when a token is first generated during decoding. As a result, the token-level compression policy cannot be applied immediately after a token is written into the KV cache. To make the same policy work during autoregressive decoding, \method\ introduces a dual-window online execution mechanism that delays compression until each token has accumulated enough future attention evidence.
 
 During decoding, the KV cache is organized into two consecutive windows of size $W$, as illustrated in Fig.~\ref{fig:dual-window}. Window A stores tokens waiting to be compressed, while Window B stores newly generated tokens whose queries provide additional attention observations for Window A. This design avoids compressing a token too early, before it has accumulated enough future attention observations.
 
@@ -228,10 +244,10 @@ When a new query $\mathbf{q}_t$ is produced at decoding step $t$, we compute its
 \end{equation}
 where $\mathbf{K}_A$ denotes the key states of Window A. The resulting attention scores are accumulated in an attention buffer
 \begin{equation}
-\mathbf{Acc} \in \mathbb{R}^{B \times H \times W},
+\mathbf{Acc} \in \mathbb{R}^{N_b \times H \times W},
 \end{equation}
 
-where $B$ is the batch size, $H$ is the number of attention heads, and $W$ is the window size.
+where $N_b$ is the batch size, $H$ is the number of attention heads, and $W$ is the window size.
 
 When Window B becomes full, tokens in Window A have received different numbers of future observations, since earlier tokens are visible to more later queries. We therefore normalize the accumulated attention before reusing it as the token-importance signal. For the token at position $i \in \{0,\dots,W-1\}$ in Window A, where $i$ is zero-indexed, the number of observations is
 \begin{equation}
@@ -280,7 +296,7 @@ node[midway, below=8pt, align=center] {Window A\\[-1mm](to compress)};
 node[midway, below=8pt, align=center] {Window B\\[-1mm](observation)};
 \node[text=black!70] at (7.85,1.36) {Newly generated tokens};
 \end{tikzpicture}
-\caption{Dual-window online mechanism during decoding. Window A accumulates attention statistics before compression, while Window B collects newly generated tokens and provides future observations.}
+\caption{Dual-window online execution mechanism during decoding. Window A accumulates attention statistics before compression, while Window B collects newly generated tokens and provides future observations.}
 \label{fig:dual-window}
 \end{figure}
 
@@ -304,7 +320,7 @@ node[midway, below=8pt, align=center] {Window B\\[-1mm](observation)};
 \label{sec:quant}
 % 在完成词元级稀疏决策之后，剩余的非零 KV 状态仍需进一步采用低比特表示，以降低存储与访存开销。由于前面的压缩策略是在词元粒度上进行分配的，而后续运行时中的稀疏与量化算子同样沿词元维度组织 tile 并进行处理，因此量化方式应与这一粒度保持一致。为此，\method\ 采用 Per-Token-Tile 量化：在词元粒度与下游算子组织方式对齐的基础上，进一步以 tile 为单位进行量化，从而形成与实际执行路径相匹配的较细粒度低比特表示。
 
-The remaining nonzero KV states still require a low-bit representation to reduce storage and memory traffic.Since the token-level compression policy is carried through the downstream sparse-quant operators, which are likewise organized as tiles along the token dimension, quantization should follow the same granularity. We therefore adopt \emph{per-token-tile} quantization, which aligns the quantization unit with both the token-level compression policy and the tile-based execution path, while providing a fine-grained low-bit representation.
+The remaining nonzero KV states still require a low-bit representation to reduce storage and memory traffic. Since token-level compression decisions are carried through the downstream sparse-quant operators, which are likewise organized as tiles along the token dimension, quantization should follow the same granularity. We therefore adopt \emph{Per-Token-Tile} quantization, which aligns the quantization unit with both token-level compression decisions and the tile-based decode path, while providing a fine-grained low-bit representation.
 
 
 
@@ -380,13 +396,13 @@ Table~\ref{tab:hadamard_sparse_quant} further supports this observation quantita
 \subsection{Sparse-Quant Format and Decode Kernel}
 \label{sec:sparse-quant}
 
-Compression quality alone is not enough if the resulting representation cannot be executed efficiently at decode time. We therefore co-design a sparse-quant storage format and its matching attention kernel, so that the compressed KV cache not only reduces storage cost, but also translates into practical decoding speedup.
+Compression quality alone is not enough if the resulting representation cannot be executed efficiently at decode time. We therefore co-design a sparse-quant format and its matching decode kernel, so that the compressed KV cache not only reduces storage cost, but also translates into practical decode acceleration.
 
 Figure~\ref{fig:sq-kernel-overview} gives an overview of this design. The left panel shows the sparse-quant format. Each $1 \times 64$ tile stores a bitmap for nonzero positions, packed low-bit values, a per-tile offset, and quantization metadata such as scales and zero points. This layout is designed to support high sparsity and low-bit storage while preserving a regular memory organization, thereby avoiding the irregular accesses and indexing overheads of conventional sparse formats.
 
-The right panel shows the corresponding attention kernel for decoding. During decode, the kernel follows a \emph{load-as-compressed, compute-as-dense} strategy. It first loads bitmaps and packed low-bit values from memory, then reconstructs the nonzeros through unpacking and dequantization, and scatters them into dense shared-memory tiles. Tensor Core matrix-vector computation is then performed on these reconstructed dense tiles. In this way, sparsity is handled only along the data-loading path, while the actual compute stage still uses regular dense operators.
+The right panel shows the matching decode kernel. During decode, the kernel follows a \emph{load-as-compressed, compute-as-dense} strategy. It first loads bitmaps and packed low-bit values from memory, then reconstructs the nonzeros through unpacking and dequantization, and scatters them into dense shared-memory tiles. Tensor Core matrix-vector computation is then performed on these reconstructed dense tiles. In this way, sparsity is handled only along the data-loading path, while the actual compute stage still uses regular dense operators.
 
-This design is particularly important for decode-stage attention, which is strongly memory-bound. By keeping the KV cache compressed in memory, the format reduces memory traffic; by reconstructing dense tiles only along the compute path, the kernel avoids the control-flow divergence and irregular accesses that often limit sparse execution. As a result, the sparse-quant format and attention kernel together convert compressed KV representations into practical decoding gains, rather than merely reducing storage footprint.
+This design is particularly important for decode-stage attention, which is strongly memory-bound. By keeping the KV cache compressed in memory, the format reduces memory traffic; by reconstructing dense tiles only along the compute path, the kernel avoids the control-flow divergence and irregular accesses that often limit sparse execution. As a result, the sparse-quant format and decode kernel together convert compressed KV representations into practical decode-time gains, rather than merely reducing storage footprint.
 
 \begin{figure}[t]
 \centering
@@ -395,16 +411,16 @@ This design is particularly important for decode-stage attention, which is stron
 \includegraphics[width=0.98\linewidth]{figures/bitmap_sparse_quant_format.pdf}
 \vspace{1mm}
 
-\small (a) Bitmap-based sparse-quant format
+\small (a) bitmap-based sparse-quant format
 \end{minipage}\hfill
 \begin{minipage}[t]{0.47\textwidth}
 \centering
 \includegraphics[width=0.98\linewidth]{figures/bitmap_sparse_quant_operator.pdf}
 \vspace{1mm}
 
-\small (b) Sparse-quant decode pipeline
+\small (b) Sparse-quant decode kernel
 \end{minipage}
-\caption{Overview of the sparse-quant format and attention kernel. The left panel shows the bitmap-based sparse-quant storage format. The right panel shows the decode pipeline that loads compressed tiles, performs unpacking and dequantization, reconstructs dense shared-memory tiles, and invokes Tensor Core matrix-vector computation.}
+\caption{Overview of the sparse-quant format and decode kernel. The left panel shows the bitmap-based sparse-quant format. The right panel shows the decode kernel that loads compressed tiles, performs unpacking and dequantization, reconstructs dense shared-memory tiles, and invokes Tensor Core matrix-vector computation.}
 \label{fig:sq-kernel-overview}
 \end{figure}
 
@@ -416,10 +432,10 @@ This design is particularly important for decode-stage attention, which is stron
 
 To evaluate \method, we conduct all experiments on the same hardware platform unless otherwise noted. The system uses an NVIDIA A100 80GB PCIe GPU, an Intel Xeon CPU, and 252GB host memory. Our implementation is based on Python 3.10, PyTorch 2.6.0, CUDA 12.4, HuggingFace Transformers, and FlashAttention~\cite{dao2022flashattention}. For the critical compression and decoding path, \method\ uses custom CUDA/Triton kernels for sparse-quant packing and decode-time reconstruction.
 
-We use Meta-Llama-3-8B~\cite{grattafiori2024llama3} as the main model and further evaluate on Llama2-7B, Llama2-13B, Mistral-7B, and Qwen2.5-7B for cross-model validation. Accuracy is measured on LongBench~\cite{longbench} with the official evaluation pipeline. Inputs are truncated to 8192 tokens; when an example is longer, we keep the first 4096 tokens and the last 4096 tokens. No extra training or fine-tuning is applied.
+We use Meta-Llama-3-8B~\cite{grattafiori2024llama3} as the main model and further evaluate on Llama2-7B, Mistral-7B, and Qwen2.5-7B for cross-model validation. Accuracy is measured on LongBench~\cite{longbench} with the official evaluation pipeline. Inputs are truncated to 8192 tokens; when an example is longer, we keep the first 4096 tokens and the last 4096 tokens. No extra training or fine-tuning is applied.
 
 \paragraph{Budget instantiation protocol.}
-For all differential-sparsity and joint sparse-quant settings, we do not fix a single universal three-level policy in advance. Instead, under each target average sparsity budget, we instantiate the policy using the calibration procedure described in Section~\ref{sec:budget-config}. Concretely, for a target budget $B \in \{0.5, 0.7\}$, we construct a feasible candidate set of three-level configurations $c = ([p_0,p_1,p_2], \rho_1)$ satisfying the budget constraint in Equation~\eqref{eq:budget_constraint}, evaluate these candidates on a small held-out calibration split, and select the best-performing configuration under the same budget. We then re-evaluate the selected configuration on a disjoint validation split before running the full LongBench evaluation.
+For all differential-sparsity and joint sparse-quant settings, we do not fix a single universal three-level policy in advance. Instead, under each target average sparsity budget, we instantiate the policy using the calibration procedure described in Section~\ref{sec:diff-sparsity}. Concretely, for a target budget $B \in \{0.5, 0.7\}$, we construct a feasible candidate set of three-level configurations $c = ([p_0,p_1,p_2], \rho_1)$ satisfying the budget constraint in Equation~\eqref{eq:budget_constraint}, evaluate these candidates on a small held-out calibration split, and select the best-performing configuration under the same budget. We then re-evaluate the selected configuration on a disjoint validation split before running the full LongBench evaluation.
 
 Unless otherwise noted, the calibration protocol keeps the remaining selection hyperparameters fixed and only searches the budget allocation itself, namely the dense/partial/evict proportions and the intermediate sparsity level. This protocol ensures that matched-budget comparisons are fair in two senses: the compared methods have the same target average sparsity, and the differential policy is instantiated through the same calibration procedure rather than through hidden task-specific manual tuning. For task-adaptive results, calibration and validation are performed separately for each task; for shared-policy results, one calibrated configuration is selected and then reused across the evaluation tasks.
 
@@ -540,13 +556,13 @@ Compression is useful only if its own overhead remains controlled. Table~\ref{ta
 
 \begin{table}[t]
 \centering
-\caption{Representative compression overhead and KV cache size for Meta-Llama-3-8B (input length 4096). Compression ratio is original KV size divided by compressed KV size.}
+\caption{Representative compression overhead and KV-cache size for Meta-Llama-3-8B (input length 4096). Compression ratio is original KV size divided by compressed KV size.}
 \label{tab:compression-summary}
 \setlength{\tabcolsep}{5pt}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{ccccc}
 \toprule
-Batch Size & Method & KV Cache Size (MB) & Compression Ratio & Compression Time (ms) \\
+Batch Size & Method & KV-Cache Size (MB) & Compression Ratio & Compression Time (ms) \\
 \midrule
 \multirow{4}{*}{1}
 & Sparse50 & 2720.16 & 1.51$\times$ & 740.80 \\
@@ -585,7 +601,7 @@ w/o Per-Token-Tile & 22.33 & 44.29 & 23.18 & 44.98 & 33.70 \\
 \end{tabular}}
 \end{table}
 
-Taken together, these results support the main thesis of \method: high-ratio KV cache compression works best when token selection, numeric representation, and decode execution are designed as one system.
+Taken together, these results support the main thesis of \method: high-ratio KV-cache compression works best when token selection, numeric representation, and execution path are designed as one system.
 
 % \section{Related Work}
 % \label{sec:related}
@@ -629,7 +645,7 @@ Firstly, its effectiveness relies on explicit token-importance evaluation rather
 \section{Conclusion}
 \label{sec:conclusion}
 
-\method\ reduces KV cache cost through differential sparsification, stabilized low-bit quantization, and a bitmap-based sparse-quant decode path. Evaluation results show consistent gains over a sequential sparsity-plus-quantization baseline under matched compression budgets, and they further show that compression savings can translate into practical throughput gains during decoding. Overall, the results support treating KV cache compression as a systems-and-algorithms co-design problem rather than as a simple composition of independent post-processing steps.
+\method\ reduces KV-cache cost through differential sparsification, stabilized low-bit quantization, and a bitmap-based sparse-quant decode kernel. Evaluation results show consistent gains over a sequential sparsity-plus-quantization baseline under matched compression budgets, and they further show that compression savings can translate into practical throughput gains during decoding. Overall, the results support treating KV-cache compression as a systems-and-algorithms co-design problem rather than as a simple composition of independent post-processing steps.
 
 \bibliographystyle{splncs04}
 \bibliography{refs}

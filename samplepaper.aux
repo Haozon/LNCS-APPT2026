@@ -9,12 +9,12 @@
 \citation{hooper2024kvquant}
 \citation{ashkboos2024quarot}
 \citation{liu2024kivi}
-\@writefile{toc}{\contentsline {title}{JSQKV: Joint Sparsification and Quantization for KV Cache Compression and Decoding Acceleration}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {title}{JSQKV: Joint Sparsification and Quantization for KV-Cache Compression and Decode Acceleration}{1}{}\protected@file@percent }
 \@writefile{toc}{\authcount {1}}
 \@writefile{toc}{\contentsline {author}{Anonymous Authors}{1}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{}\protected@file@percent }
 \newlabel{sec:intro}{{1}{1}{}{section.1}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Overview of JSQKV. The method first estimates token importance from prefill attention and instantiates a budgeted differential sparsity policy. It then extends this policy to autoregressive decoding through a dual-window online mechanism, represents retained KV states with Hadamard-based Per-Token-Tile quantization, and finally executes the compressed cache with a bitmap-based sparse-quant decode kernel to reduce memory traffic.}}{3}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Overview of JSQKV. The method first estimates token importance from prefill attention and instantiates a budgeted differential sparsity policy. It then extends this policy to autoregressive decoding through a dual-window online execution mechanism, represents retained KV states with Hadamard-based Per-Token-Tile quantization, and finally executes the compressed cache with a bitmap-based sparse-quant decode kernel to reduce memory traffic.}}{3}{}\protected@file@percent }
 \newlabel{fig:JSQKV-overview}{{1}{3}{}{figure.1}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {2}Method}{3}{}\protected@file@percent }
 \newlabel{sec:method}{{2}{3}{}{section.2}{}}
@@ -26,11 +26,11 @@
 \newlabel{eq:budget_constraint}{{8}{5}{}{equation.8}{}}
 \newlabel{eq:budget_solver}{{9}{5}{}{equation.9}{}}
 \newlabel{eq:calibration_objective}{{10}{5}{}{equation.10}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Dual-Window Online Execution for Decoding}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Dual-Window Online Execution Mechanism}{5}{}\protected@file@percent }
 \newlabel{sec:dual-window}{{2.3}{5}{}{subsection.2.3}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Per-Token-Tile Quantization with Hadamard Rotation}{6}{}\protected@file@percent }
 \newlabel{sec:quant}{{2.4}{6}{}{subsection.2.4}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Dual-window online mechanism during decoding. Window A accumulates attention statistics before compression, while Window B collects newly generated tokens and provides future observations.}}{7}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Dual-window online execution mechanism during decoding. Window A accumulates attention statistics before compression, while Window B collects newly generated tokens and provides future observations.}}{7}{}\protected@file@percent }
 \newlabel{fig:dual-window}{{2}{7}{}{figure.2}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Key-state activation distribution before and after Hadamard rotation on a LLaMA2-7B sample. The rotation suppresses heavy tails while preserving enough variation for feature-level sparsification.}}{8}{}\protected@file@percent }
 \newlabel{fig:hadamard}{{3}{8}{}{figure.3}{}}
@@ -39,13 +39,13 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.5}Sparse-Quant Format and Decode Kernel}{8}{}\protected@file@percent }
 \newlabel{sec:sparse-quant}{{2.5}{8}{}{subsection.2.5}{}}
 \citation{dao2022flashattention}
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Overview of the sparse-quant format and attention kernel. The left panel shows the bitmap-based sparse-quant storage format. The right panel shows the decode pipeline that loads compressed tiles, performs unpacking and dequantization, reconstructs dense shared-memory tiles, and invokes Tensor Core matrix-vector computation.}}{9}{}\protected@file@percent }
+\citation{grattafiori2024llama3}
+\citation{longbench}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Overview of the sparse-quant format and decode kernel. The left panel shows the bitmap-based sparse-quant format. The right panel shows the decode kernel that loads compressed tiles, performs unpacking and dequantization, reconstructs dense shared-memory tiles, and invokes Tensor Core matrix-vector computation.}}{9}{}\protected@file@percent }
 \newlabel{fig:sq-kernel-overview}{{4}{9}{}{figure.4}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {3}Experiments}{9}{}\protected@file@percent }
 \newlabel{sec:experiments}{{3}{9}{}{section.3}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Experimental Setup}{9}{}\protected@file@percent }
-\citation{grattafiori2024llama3}
-\citation{longbench}
 \citation{joo2025mustafar}
 \citation{liu2024kivi}
 \@writefile{toc}{\contentsline {paragraph}{Budget instantiation protocol.}{10}{}\protected@file@percent }
@@ -70,13 +70,13 @@
 \newlabel{sec:discussion}{{4}{13}{}{section.4}{}}
 \bibstyle{splncs04}
 \bibdata{refs}
-\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Representative compression overhead and KV cache size for Meta-Llama-3-8B (input length 4096). Compression ratio is original KV size divided by compressed KV size.}}{14}{}\protected@file@percent }
+\bibcite{ashkboos2024quarot}{1}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Representative compression overhead and KV-cache size for Meta-Llama-3-8B (input length 4096). Compression ratio is original KV size divided by compressed KV size.}}{14}{}\protected@file@percent }
 \newlabel{tab:compression-summary}{{6}{14}{}{table.6}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Component ablation on Meta-Llama-3-8B under 70/70 sparsity and 2-bit quantization.}}{14}{}\protected@file@percent }
 \newlabel{tab:component-ablation}{{7}{14}{}{table.7}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {5}Conclusion}{14}{}\protected@file@percent }
 \newlabel{sec:conclusion}{{5}{14}{}{section.5}{}}
-\bibcite{ashkboos2024quarot}{1}
 \bibcite{longbench}{2}
 \bibcite{pyramidkv}{3}
 \bibcite{chen2025rotatekvaccuraterobust}{4}

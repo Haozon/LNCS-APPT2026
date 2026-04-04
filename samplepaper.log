@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999997 (MiKTeX 25.12) (preloaded format=xelatex 2026.3.26)  3 APR 2026 22:28
+This is XeTeX, Version 3.141592653-2.6-0.999997 (MiKTeX 25.12) (preloaded format=xelatex 2026.3.26)  4 APR 2026 11:01
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -619,7 +619,7 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 File: figures/JSQKV_Overview.drawio.pdf Graphic file (type pdf)
 <use figures/JSQKV_Overview.drawio.pdf>
  [3] [4] [5]
-Overfull \hbox (9.41771pt too wide) in paragraph at lines 244--246
+Overfull \hbox (9.41771pt too wide) in paragraph at lines 260--262
 \T1/lmr/m/n/10 These nor-mal-ized scores are then com-pared against the same th
 resh-olds $\OT1/cmr/m/n/10 (\OML/cmm/m/it/10 ^^\[]; ^^\[]\OT1/cmr/m/n/10 )$
  []
@@ -633,15 +633,14 @@ File: figures/bitmap_sparse_quant_format.pdf Graphic file (type pdf)
 File: figures/bitmap_sparse_quant_operator.pdf Graphic file (type pdf)
 <use figures/bitmap_sparse_quant_operator.pdf>
  [9]
+Underfull \vbox (badness 10000) has occurred while \output is active []
 
-LaTeX Warning: Reference `sec:budget-config' on page 10 undefined on input line
- 422.
-
-[10] [11]
+ [10]
+[11]
 File: figures/throughput_llama3_bs.pdf Graphic file (type pdf)
 <use figures/throughput_llama3_bs.pdf>
  [12]
-Overfull \hbox (5.37659pt too wide) in paragraph at lines 625--626
+Overfull \hbox (5.37659pt too wide) in paragraph at lines 641--642
 \T1/lmr/m/n/10 Although JSQKV achieves a fa-vor-able accuracy-efficiency trade-
 off in long-context
  []
@@ -657,16 +656,12 @@ v preprint
 LaTeX2e <2025-11-01>
 L3 programming layer <2025-12-29>
  ***********
-
-
-LaTeX Warning: There were undefined references.
-
  ) 
 Here is how much of TeX's memory you used:
- 14266 strings out of 402987
- 283548 string characters out of 5453906
- 671536 words of memory out of 5000000
- 42718 multiletter control sequences out of 15000+600000
+ 14265 strings out of 402987
+ 283529 string characters out of 5453906
+ 675755 words of memory out of 5000000
+ 42717 multiletter control sequences out of 15000+600000
  674748 words of font info for 85 fonts, out of 8000000 for 9000
  1348 hyphenation exceptions out of 8191
  84i,11n,104p,1228b,732s stack positions out of 10000i,1000n,20000p,200000b,200000s
