@@ -27,31 +27,46 @@
 \newcommand{\method}{JSQKV}
 \newcommand{\attnscorefigdir}{figures/attnscorecrossfigdir}
 \newcommand{\attnscorecrossfigdir}{figures/attnscorecrossfigdir}
+\newcommand{\multifieldqa}{Multi\-FieldQA-EN}
+\newcommand{\multifieldqaheader}{\shortstack{MultiFieldQA-\\EN}}
+
+\newif\ifanonymous
+\anonymoustrue
+% \anonymousfalse % Uncomment for the camera-ready version.
+
+\ifanonymous
+\newcommand{\paperauthors}{Anonymous Authors}
+\newcommand{\paperauthorrunning}{Anonymous Submission}
+\newcommand{\paperinstitute}{Anonymous Institution}
+\newcommand{\paperavailability}{Code repository omitted for double-blind review.}
+\else
+\newcommand{\paperauthors}{Hao Zhang\inst{1} \and
+Xiaoli Gong\inst{1}\thanks{Corresponding author.}}
+\newcommand{\paperauthorrunning}{H. Zhang, X. Gong}
+\newcommand{\paperinstitute}{College of Computer Science, Nankai University, Tianjin, China\\
+\email{2120230710@mail.nankai.edu.cn, gongxiaoli@nankai.edu.cn}}
+\newcommand{\paperavailability}{Code is available at \url{https://github.com/Haozon/JSQKV}.}
+\fi
 
 \begin{document}
 
 \title{\method: Joint Sparsification and Quantization for KV-Cache Compression and Decode Acceleration}
 \titlerunning{\method\\: Joint Sparsification and Quantization for KV-Cache Compression}
 
-\author{First Author\inst{1}\orcidID{0000-1111-2222-3333} \and
-Second Author\inst{2,3}\orcidID{1111-2222-3333-4444} \and
-Third Author\inst{3}\orcidID{2222-3333-4444-5555}}
-\authorrunning{F. Author et al.}
-
-\institute{Princeton University, Princeton NJ 08544, USA \and
-Springer Heidelberg, Tiergartenstr. 17, 69121 Heidelberg, Germany
-\email{lncs@springer.com}\\
-\url{http://www.springer.com/gp/computer-science/lncs} \and
-ABC Institute, Rupert-Karls-University Heidelberg, Heidelberg, Germany\\
-\email{\{abc,lncs\}@uni-heidelberg.de}}
+\author{\paperauthors}
+%
+\authorrunning{\paperauthorrunning}
+% First names are abbreviated in the running head.
+%
+\institute{\paperinstitute}
 
 \maketitle
 
 \begin{abstract}
 
 As long-context large language models become increasingly widespread, autoregressive decoding is increasingly bottlenecked by KV-cache footprint and memory bandwidth. Existing KV-cache compression methods typically rely on sparsification or low-bit quantization, but simply combining the two often fails to simultaneously preserve model accuracy and deliver real system-level gains.
-We present JSQKV, a joint sparse-quant framework for KV-cache compression and decode acceleration that co-designs compression policy, numerical representation, and execution path. JSQKV introduces an attention-score-based differential sparsification strategy with a dual-window online execution mechanism, together with a Hadamard-based Per-Token-Tile quantization scheme and a bitmap-based sparse-quant format with a matching decode kernel. This co-design enables compressed KV-cache data to remain compact in memory while being effectively translated into reduced memory traffic and end-to-end speedup.
-Experimental results show that, under matched compression budgets, JSQKV generally compares favorably with the sequential MUSTAFAR+KIVI baseline on LongBench, with larger gains under more aggressive sparse-quant settings. On Meta-Llama-3-8B-Instruct, with input length 4096 and output length 256, JSQKV improves end-to-end throughput by 44.2\% over the dense baseline at batch size 4 using 70\% KV sparsity and 2-bit quantization, while increasing the KV-cache compression ratio to 3.48$\times$. These results suggest that efficient KV-cache compression benefits from joint optimization across compression policy, numerical representation, and execution path. Code is available at https://github.com/Haozon/JSQKV.
+We present JSQKV, a joint sparse-quant framework for KV-cache compression and decode acceleration that codesigns compression policy, numerical representation, and execution path. JSQKV introduces an attention-score-based differential sparsification strategy with a dual-window online execution mechanism, together with a Hadamard-based Per-Token-Tile quantization scheme and a bitmap-based sparse-quant format with a matching decode kernel. This co-design enables compressed KV-cache data to remain compact in memory while being effectively translated into reduced memory traffic and end-to-end speedup.
+Experimental results show that, under matched compression budgets, JSQKV generally compares favorably with the sequential MUSTAFAR+KIVI baseline on LongBench, with larger gains under more aggressive sparse-quant settings. On Meta-Llama-3-8B-Instruct, with input length 4096 and output length 256, JSQKV improves end-to-end throughput by 44.2\% over the dense baseline at batch size 4 using 70\% KV sparsity and 2-bit quantization, while increasing the KV-cache compression ratio to 3.48$\times$. These results suggest that efficient KV-cache compression benefits from joint optimization across compression policy, numerical representation, and execution path. \paperavailability
 
 \keywords{KV-cache compression \and Sparsity \and Quantization}
 \end{abstract}
@@ -350,9 +365,9 @@ This design is particularly important for decode-stage attention, which is stron
 
 We evaluate \method\ on both accuracy and efficiency. Our implementation is built on Python 3.10, PyTorch 2.6.0, CUDA 12.4, and FlashAttention~\cite{dao2022flashattention}, and uses custom CUDA/Triton kernels for sparse-quant packing and the sparse-quant decode kernel. All experiments are conducted on a single NVIDIA A100 80GB PCIe GPU with an Intel Xeon CPU and 252GB host memory.
 
-For accuracy evaluation, we use LongBench~\cite{longbench} with the official pipeline. Our main sparse-only and joint sparse-quant comparisons focus on six focal LongBench tasks---NarrativeQA, Qasper, MultiFieldQA-EN, HotpotQA, TREC, and LCC---which cover diverse long-context behaviors while enabling stable matched-budget comparisons across compression settings and model families. We use Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} as the main model and further evaluate on Llama-2-7B~\cite{touvron2023llama2}, Mistral-7B-v0.1~\cite{jiang2023mistral7b}, and Qwen2.5-7B-Instruct~\cite{yang2024qwen25}. Inputs are truncated to 8192 tokens by keeping the first 4096 and the last 4096 tokens when necessary. We compare against dense decoding, a MUSTAFAR-style uniform sparsity baseline~\cite{joo2025mustafar}, and a sequential sparse-then-quantize baseline that combines uniform sparsity with KIVI-style low-bit quantization~\cite{liu2024kivi}, denoted as \textbf{M+K}. We report 50\% and 70\% average sparsity for sparse-only comparisons, and 50/50 and 70/70 K/V sparsity with 4-bit and 2-bit quantization for joint sparse-quant comparisons. Differential policies are selected by a lightweight held-out calibration procedure; detailed reporting rules and finalized configurations are provided in Appendix~\ref{app:diffsparse-extra}.
+For accuracy evaluation, we use LongBench~\cite{longbench} with the official pipeline. Our main sparse-only and joint sparse-quant comparisons focus on six focal tasks from this benchmark. These tasks are NarrativeQA, Qasper, \multifieldqa, HotpotQA, TREC, and LCC. They cover diverse long-context behaviors while enabling stable matched-budget comparisons across compression settings and model families. We use Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} as the main model and further evaluate on Llama-2-7B~\cite{touvron2023llama2}, Mistral-7B-v0.1~\cite{jiang2023mistral7b}, and Qwen2.5-7B-Instruct~\cite{yang2024qwen25}. Inputs are truncated to 8192 tokens by keeping the first 4096 and the last 4096 tokens when necessary. We compare against dense decoding, a uniform sparsity baseline using the MUSTAFAR sparsity setting~\cite{joo2025mustafar}, and a sequential sparse-then-quantize baseline that combines that sparsity setting with KIVI quantization~\cite{liu2024kivi}, denoted as \textbf{M+K}. We report 50\% and 70\% average sparsity for sparse-only comparisons, and 50/50 and 70/70 K/V sparsity with 4-bit and 2-bit quantization for joint sparse-quant comparisons. Differential policies are selected by a lightweight held-out calibration procedure; detailed reporting rules and finalized configurations are provided in Appendix~\ref{app:diffsparse-extra}.
 
-For efficiency evaluation, we use Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} with 4096 input tokens, 256 generated tokens, and batch sizes from 1 to 8. We report end-to-end decoding throughput, compression overhead, compressed KV-cache size, and compression ratio. Runtime comparisons focus on executable baselines, namely dense decoding, the MUSTAFAR-style sparse kernel, and the proposed sparse-quant runtime path.
+For efficiency evaluation, we use Meta-Llama-3-8B-Instruct with 4096 input tokens, 256 generated tokens, and batch sizes from 1 to 8. We report end-to-end decoding throughput, compression overhead, compressed KV-cache size, and compression ratio. Runtime comparisons focus on executable baselines, namely dense decoding, the MUSTAFAR~\cite{joo2025mustafar} sparse kernel, and the proposed sparse-quant runtime path.
 
 \subsection{Accuracy Results}
 
@@ -360,21 +375,21 @@ For efficiency evaluation, we use Meta-Llama-3-8B-Instruct~\cite{grattafiori2024
 \label{sec:diff-sparsity-alone}
 \suppressfloats[t]
 
-We first study differential sparsity without quantization or Hadamard rotation, in order to isolate the effect of budget allocation. We compare \method\ against a matched-budget \emph{uniform} sparsity baseline, where all tokens are compressed with the same sparsity rule regardless of importance. This is also the sparse token policy used in MUSTAFAR-style KV-cache compression. We report results at 50\% and 70\% average sparsity, with dense decoding as an uncompressed reference.
+We first study differential sparsity without quantization or Hadamard rotation, in order to isolate the effect of budget allocation. We compare \method\ against a matched-budget \emph{uniform} sparsity baseline, where all tokens are compressed with the same sparsity rule regardless of importance. This is also the sparse token policy used in MUSTAFAR~\cite{joo2025mustafar}. We report results at 50\% and 70\% average sparsity, with dense decoding as an uncompressed reference.
 
 For each task and target budget, we select the differential policy on a small calibration split and re-check it on a disjoint validation split before full evaluation. For robustness, we use a conservative reporting protocol, and the finalized reported results are summarized in the main text; detailed task-level outcomes and reporting decisions are provided in Appendix~\ref{app:diffsparse-extra}.
 
-Table~\ref{tab:diff-sparsity-meta-main} reports sparse-only results on six focal LongBench tasks for Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. The main comparison is between matched-budget uniform and differential sparsity. Under the conservative reporting protocol, the finalized differential results remain non-negative, and the gain is more pronounced at 70\% sparsity than at 50\%. This shows that differential budget allocation becomes increasingly valuable under tighter sparsity budgets.
+Table~\ref{tab:diff-sparsity-meta-main} reports sparse-only results on six representative LongBench tasks for Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. The main comparison is between matched-budget uniform and differential sparsity. Under the conservative reporting protocol, the finalized differential results remain non-negative, and the gain is more pronounced at 70\% sparsity than at 50\%. This shows that differential budget allocation becomes increasingly valuable under tighter sparsity budgets.
 
 \begin{table}[t]
 \label{tab:diff-sparsity-meta-main}
 \centering
-\caption{Sparse-only differential sparsity versus matched-budget uniform sparsity on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} over six focal LongBench tasks. Dense decoding is reported as an uncompressed reference. ``Uniform'' corresponds to the token-agnostic policy used in MUSTAFAR. In a few cases, the reported differential result reverts to the uniform baseline.}
+\caption{Sparse-only differential sparsity versus matched-budget uniform sparsity on Meta-Llama-3-8B-Instruct over six representative LongBench tasks. Dense decoding is reported as an uncompressed reference. ``Uniform'' corresponds to the token-agnostic policy used in MUSTAFAR. In a few cases, the reported differential result reverts to the uniform baseline.}
 \setlength{\tabcolsep}{4pt}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{lccccccc}
 \toprule
-Method & NarrativeQA & Qasper & MultiFieldQA\_EN & HotpotQA & TREC & LCC & Avg. \\
+Method & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
 \midrule
 Dense & 23.45 & 42.18 & 43.14 & 46.06 & 74.00 & 57.12 & 47.66 \\
 \midrule
@@ -391,7 +406,7 @@ The same pattern holds across architectures. Table~\ref{tab:diff-sparsity-cross-
 
 \begin{table}[t]
 \centering
-\caption{Cross-model average sparse-only results on the six focal LongBench tasks. ``Differential'' denotes the finalized full-task average under the same reporting protocol as the main-text sparse-only study.}
+\caption{Cross-model average sparse-only results on the six representative LongBench tasks. ``Differential'' denotes the finalized full-task average under the same reporting protocol as the main-text sparse-only study.}
 \label{tab:diff-sparsity-cross-model-main}
 \setlength{\tabcolsep}{5pt}
 \resizebox{0.82\textwidth}{!}{
@@ -414,17 +429,17 @@ Overall, these sparse-only results show that differential sparsity is already be
 \FloatBarrier
 
 \subsubsection{Joint sparsity-quantization results.}
-We evaluate the full joint sparse-quant framework on six focal LongBench tasks: NarrativeQA, Qasper, MultiFieldQA-EN, HotpotQA, TREC, and LCC. Table~\ref{tab:main-accuracy} reports detailed results on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. On this model, \method\ yields higher average scores than the sequential M+K baseline in all four tested settings. The gain is modest under milder compression, but becomes larger under more aggressive sparse-quant settings, especially at 70/70 + 2-bit. Under this most aggressive setting, the average score improves from 39.83 to 43.12, with notable gains on Qasper, TREC, and LCC. This trend is consistent with the motivation of \method: as the compression ratio increases, the benefit of jointly aligning sparsity, quantization, and runtime execution also increases.
+We evaluate the full joint sparse-quant framework on six representative LongBench tasks: NarrativeQA, Qasper, \multifieldqa, HotpotQA, TREC, and LCC. Table~\ref{tab:main-accuracy} reports detailed results on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. On this model, \method\ yields higher average scores than the sequential M+K baseline in all four tested settings. The gain is modest under milder compression, but becomes larger under more aggressive sparse-quant settings, especially at 70/70 + 2-bit. Under this most aggressive setting, the average score improves from 39.83 to 43.12, with notable gains on Qasper, TREC, and LCC. This trend is consistent with the motivation of \method: as the compression ratio increases, the benefit of jointly aligning sparsity, quantization, and runtime execution also increases.
 
 \begin{table}[t]
 \centering
-\caption{Detailed results on six focal LongBench tasks for Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. ``50/50'' and ``70/70'' denote target sparsity ratios for K and V caches.}
+\caption{Detailed results on six representative LongBench tasks for Meta-Llama-3-8B-Instruct. ``50/50'' and ``70/70'' denote target sparsity ratios for K and V caches.}
 \label{tab:main-accuracy}
 \setlength{\tabcolsep}{4pt}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{lccccccc}
 \toprule
-Setting & NarrativeQA & Qasper & MultiFieldQA\_EN & HotpotQA & TREC & LCC & Avg. \\
+Setting & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
 \midrule
 M+K, 50/50 + 4-bit & 21.61 & \textbf{40.70} & \textbf{47.62} & 41.13 & \textbf{70.50} & 53.83 & 45.90 \\
 \method, 50/50 + 4-bit & \textbf{21.92} & 39.38 & 46.77 & \textbf{41.38} & \textbf{70.50} & \textbf{55.64} & \textbf{45.93} \\
@@ -438,11 +453,11 @@ M+K, 70/70 + 2-bit & \textbf{21.34} & 35.43 & 43.43 & 39.21 & 63.00 & 36.59 & 39
 \end{tabular}}
 \end{table}
 
-To test whether the trend is specific to one architecture, Table~\ref{tab:cross-model} summarizes the average score on the same six focal LongBench tasks for three additional model families. The results indicate a generally favorable but not perfectly uniform trend for \method\ over M+K across models and compression settings. The gains are most visible on Meta-Llama-3-8B-Instruct and Mistral-7B-v0.1, and remain visible in most settings on Llama-2-7B and Qwen2.5-7B-Instruct, especially under tighter budgets. At the same time, a few settings remain negative or nearly neutral, such as Llama-2-7B at 50/50 + 2-bit and Qwen2.5-7B-Instruct at 50/50 + 2-bit. Overall, these results suggest that the benefit of \method\ is mainly associated with the joint design itself, while its magnitude still depends on model family and compression budget. To isolate the quantization contribution from the sparse policy, Appendix~\ref{app:quant-only} further reports a quantization-only comparison between the \method\ quantizer and a matched KIVI-style baseline.
+To test whether the trend is specific to one architecture, Table~\ref{tab:cross-model} summarizes the average score on the same six representative LongBench tasks for three additional model families. The results indicate a generally favorable but not perfectly uniform trend for \method\ over M+K across models and compression settings. The gains are most visible on Meta-Llama-3-8B-Instruct and Mistral-7B-v0.1, and remain visible in most settings on Llama-2-7B and Qwen2.5-7B-Instruct, especially under tighter budgets. At the same time, a few settings remain negative or nearly neutral, such as Llama-2-7B at 50/50 + 2-bit and Qwen2.5-7B-Instruct at 50/50 + 2-bit. Overall, these results suggest that the benefit of \method\ is mainly associated with the joint design itself, while its magnitude still depends on model family and compression budget. To isolate the quantization contribution from the sparse policy, Appendix~\ref{app:quant-only} further reports a quantization-only comparison between the \method\ quantizer and a matched KIVI baseline.
 
 \begin{table}[t]
 \centering
-\caption{Cross-model averages on six focal LongBench tasks. ``M+K'' denotes the sequential MUSTAFAR+KIVI baseline.}
+\caption{Cross-model averages on six representative LongBench tasks. ``M+K'' denotes the sequential MUSTAFAR+KIVI baseline.}
 \label{tab:cross-model}
 \footnotesize
 \setlength{\tabcolsep}{3pt}
@@ -472,14 +487,13 @@ Qwen2.5-7B-Instruct & 31.17 & \textbf{37.08} & \textbf{26.10} & 23.48 & 33.00 & 
 
 \subsection{Efficiency Results}
 
-Before presenting runtime results, we clarify the efficiency comparison protocol. In the accuracy experiments, we include \textbf{M+K} (MUSTAFAR + KIVI) as a sequential sparse-plus-quantization baseline to evaluate compression quality under matched budgets. However, this sequential composition is an algorithmic baseline rather than a jointly executable runtime path: while MUSTAFAR provides a sparse decode kernel, a naive combination with KIVI does not by itself define a unified sparse-quant execution kernel for end-to-end decoding. In contrast, a central contribution of \method\ is the algorithm--system co-design of compression policy, low-bit representation, storage format, and decode kernel, which allows sparsity and quantization to be executed together and translated into practical system-level gains. Therefore, in the efficiency experiments, we compare \method\ primarily against dense decoding and the MUSTAFAR-style sparse kernel, which provides the closest executable baseline.
+Before presenting runtime results, we clarify the efficiency comparison protocol. In the accuracy experiments, we include \textbf{M+K}, which combines the MUSTAFAR sparsity setting~\cite{joo2025mustafar} with KIVI quantization~\cite{liu2024kivi}, as a sequential sparse-plus-quantization baseline to evaluate compression quality under matched budgets. However, this sequential composition is an algorithmic baseline rather than a jointly executable runtime path: while MUSTAFAR provides a sparse decode kernel, a naive combination with KIVI does not by itself define a unified sparse-quant execution kernel for end-to-end decoding. In contrast, a central contribution of \method\ is the algorithm--system co-design of compression policy, low-bit representation, storage format, and decode kernel, which allows sparsity and quantization to be executed together and translated into practical system-level gains. Therefore, in the efficiency experiments, we compare \method\ primarily against dense decoding and the MUSTAFAR sparse kernel~\cite{joo2025mustafar}, which provides the closest executable baseline.
 
 \subsubsection{End-to-end throughput.}
-Table~\ref{tab:throughput-table} and Fig.~\ref{fig:throughput} report end-to-end decoding throughput on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. Dense decoding is strongest at batch size 1, where the compression overhead is not yet amortized. As batch size increases, the compressed paths become increasingly favorable, indicating that the workload becomes more bandwidth-sensitive. The most visible advantage of the full sparse-quant design appears in the small-to-medium batch regime. For example, under the 70/70 + 2-bit setting, \method\ reaches 80.38 tokens/s at batch size 6, which is 41.5\% higher than dense decoding and 3.0\% higher than MUSTAFAR-70. At larger batch sizes, however, the throughput gap narrows and sparsity-only configurations can become preferable, suggesting that the extra unpacking and dequantization overhead is less effectively amortized once the workload becomes more compute-heavy. Overall, these results suggest that joint sparse-quant compression can translate into practical decoding speedups when KV-cache traffic remains the dominant bottleneck.
 
-\begin{table}[t]
+\begin{table}[!t]
 \centering
-\caption{End-to-end decoding throughput (tokens/s) on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} with 4096 input tokens and 256 output tokens.}
+\caption{End-to-end decoding throughput (tokens/s) on Meta-Llama-3-8B-Instruct with 4096 input tokens and 256 output tokens.}
 \label{tab:throughput-table}
 \setlength{\tabcolsep}{4pt}
 \resizebox{\textwidth}{!}{
@@ -499,22 +513,24 @@ Batch Size & Dense & MUSTAFAR-50 & MUSTAFAR-70 & \method\ 50/50 + 2-bit & \metho
 \end{tabular}}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[!t]
 \centering
-\includegraphics[width=0.8\textwidth]{figures/throughput_llama3_bs.pdf}
-\caption{End-to-end decoding throughput on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} with 4096 input tokens and 256 output tokens. The full sparse-quant path provides its most visible advantage in the small-to-medium batch regime.}
+\includegraphics[width=0.68\textwidth]{figures/throughput_llama3_bs.pdf}
+\caption{End-to-end decoding throughput on Meta-Llama-3-8B-Instruct with 4096 input tokens and 256 output tokens. The full sparse-quant path provides its most visible advantage in the small-to-medium batch regime.}
 \label{fig:throughput}
 \end{figure}
+
+Table~\ref{tab:throughput-table} and Fig.~\ref{fig:throughput} report end-to-end decoding throughput on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. Dense decoding is strongest at batch size 1, where the compression overhead is not yet amortized. As batch size increases, the compressed paths become increasingly favorable, indicating that the workload becomes more bandwidth-sensitive. The most visible advantage of the full sparse-quant design appears in the small-to-medium batch regime. For example, under the 70/70 + 2-bit setting, \method\ reaches 80.38 tokens/s at batch size 6, which is 41.5\% higher than dense decoding and 3.0\% higher than MUSTAFAR-70. At larger batch sizes, however, the throughput gap narrows and sparsity-only configurations can become preferable, suggesting that the extra unpacking and dequantization overhead is less effectively amortized once the workload becomes more compute-heavy. Overall, these results suggest that joint sparse-quant compression can translate into practical decoding speedups when KV-cache traffic remains the dominant bottleneck.
 
 \FloatBarrier
 
 \subsubsection{Compression overhead.}
 
-Compression is beneficial only when its own runtime cost remains controlled. Table~\ref{tab:compression-summary} reports representative compression statistics on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. The results show that the sparse-quant path achieves substantially higher compression ratios than sparsity-only baselines while keeping compression time competitive. For example, at batch size 8, MUSTAFAR-70 reduces the KV cache to 1964.29MB, whereas \method\ under the 70/70 + 2-bit setting further reduces it to 1176.25MB, improving the compression ratio from 2.09$\times$ to 3.48$\times$, while also lowering compression time from 5411.29ms to 4293.18ms. This suggests that the benefit of \method\ is not limited to reduced decode-time bandwidth demand; the more compact sparse-quant representation also reduces compression-side write-back cost.
+Compression is beneficial only when its own runtime cost remains controlled. Table~\ref{tab:compression-summary} reports representative compression statistics on Meta-Llama-3-8B-Instruct. The results show that the sparse-quant path achieves substantially higher compression ratios than sparsity-only baselines while keeping compression time competitive. For example, at batch size 8, MUSTAFAR-70 reduces the KV cache to 1964.29MB, whereas \method\ under the 70/70 + 2-bit setting further reduces it to 1176.25MB, improving the compression ratio from 2.09$\times$ to 3.48$\times$, while also lowering compression time from 5411.29ms to 4293.18ms. This suggests that the benefit of \method\ is not limited to reduced decode-time bandwidth demand; the more compact sparse-quant representation also reduces compression-side write-back cost.
 
 \begin{table}[t]
 \centering
-\caption{Representative compression overhead and KV-cache size for Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} (input length 4096). Compression ratio is original KV size divided by compressed KV size.}
+\caption{Representative compression overhead and KV-cache size for Meta-Llama-3-8B-Instruct (input length 4096). Compression ratio is original KV size divided by compressed KV size.}
 \label{tab:compression-summary}
 \setlength{\tabcolsep}{5pt}
 \resizebox{\textwidth}{!}{
@@ -561,7 +577,6 @@ Finally, the current evaluation scope is still limited. Although the experiments
 \clearpage
 \appendix
 \section{Threshold Stability for Prefill-to-Decode Reuse}
-\suppressfloats[t]
 \label{sec:appendix-threshold-reuse}
 
 Section~\ref{sec:diff-sparsity} estimates the token-importance thresholds
@@ -573,12 +588,15 @@ assumption: under the same normalization rule, the importance-score scale of a
 fixed layer should remain sufficiently consistent for prefill-estimated
 thresholds to remain meaningful during online decoding.
 
-We test this assumption using the exact threshold type employed by \method. We
+We test this assumption using the same threshold definition as \method. We
 compute normalized attention-derived importance scores from the observed
 attention statistics and derive the corresponding thresholds
 $(\tau_{\text{high}}, \tau_{\text{low}})$. The evaluation uses
-Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} on seven datasets:
-WikiText-2, GSM8K, Qasper, MultiFieldQA-EN, NarrativeQA, HotpotQA, and MuSiQue.
+Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} on seven datasets.
+Specifically, we use WikiText-2~\cite{merity2016pointer},
+GSM8K~\cite{cobbe2021gsm8k}, MuSiQue~\cite{trivedi2022musique}, and four
+LongBench tasks: Qasper, \multifieldqa, NarrativeQA, and
+HotpotQA~\cite{longbench}.
 Each dataset contributes 10 samples, with maximum length 192 and representative
 layers 10 and 20.
 
@@ -641,17 +659,17 @@ layer dependent.}
 \section{Additional Quantization-Only Comparison}
 \label{app:quant-only}
 
-To isolate the contribution of the numerical representation in \method, we further compare a quantization-only instantiation of the \method\ quantizer against a matched KIVI-style baseline. This study is placed in the appendix because the main paper focuses on the full sparse-quant pipeline. In this comparison, we keep the same per-token-tile low-bit representation used by \method\ but remove differential sparsity and the bitmap-based sparse runtime path.
+To isolate the contribution of the numerical representation in \method, we further compare a quantization-only instantiation of the \method\ quantizer against a matched KIVI baseline~\cite{liu2024kivi}. This study is placed in the appendix because the main paper focuses on the full sparse-quant pipeline. In this comparison, we keep the same per-token-tile low-bit representation used by \method\ but remove differential sparsity and the bitmap-based sparse runtime path.
 
-Unless otherwise noted, both methods use a residual window of 128 tokens. The KIVI-style baseline uses channel-wise key quantization, per-token-head value quantization, and group size 128, whereas the \method\ quantizer uses per-token-tile quantization with tile-wise Hadamard rotation (tile size 64 and Hadamard group size 64).
+Unless otherwise noted, both methods use a residual window of 128 tokens. The KIVI baseline uses channel-wise key quantization, per-token-head value quantization, and group size 128, whereas the \method\ quantizer uses per-token-tile quantization with tile-wise Hadamard rotation (tile size 64 and Hadamard group size 64).
 
 Table~\ref{tab:appendix-quant-llama3} reports detailed results on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} under the full 16-task LongBench protocol. At 4-bit and 3-bit, the two methods remain close in average score. At 2-bit, however, the \method\ quantizer is noticeably stronger, improving the full-benchmark average from 26.94 to 30.59, with especially visible gains on HotpotQA and LCC. This pattern suggests that the tile-aligned design is most helpful in the aggressive low-bit regime.
 
-Table~\ref{tab:appendix-quant-crossmodel} summarizes the same comparison on additional model families. To stay aligned with the main-text evaluation protocol, the cross-model comparison is anchored on the same six focal LongBench tasks used in the main sparse-only and joint sparse-quant results; full LongBench results are included only where those quantization-only runs are already available. Accordingly, this table is intended to show whether the quantization trend transfers across model families under the reported evaluation scopes, rather than to support strict cross-row ranking under a single unified benchmark. The \method\ quantizer remains competitive on Llama-2-7B and again becomes favorable at 2-bit on Mistral-7B-v0.1. Overall, the cross-model results do not indicate a uniform advantage at 4-bit or 3-bit, but they suggest that the \method\ quantizer becomes more favorable as the quantization budget is pushed to 2-bit. This trend is consistent with the main observation on Meta-Llama-3-8B-Instruct and supports the view that a main benefit of the proposed quantizer lies in improved robustness under aggressive low-bit quantization.
+Table~\ref{tab:appendix-quant-crossmodel} summarizes the same comparison on additional model families. To stay aligned with the main-text evaluation protocol, the cross-model comparison is anchored on the same six representative LongBench tasks used in the main sparse-only and joint sparse-quant results; full LongBench results are included only where those quantization-only runs are already available. Accordingly, this table is intended to show whether the quantization trend transfers across model families under the reported evaluation scopes, rather than to support strict cross-row ranking under a single unified benchmark. The \method\ quantizer remains competitive on Llama-2-7B and again becomes favorable at 2-bit on Mistral-7B-v0.1. Overall, the cross-model results do not indicate a uniform advantage at 4-bit or 3-bit, but they suggest that the \method\ quantizer becomes more favorable as the quantization budget is pushed to 2-bit. This trend is consistent with the main observation on Meta-Llama-3-8B-Instruct and supports the view that a main benefit of the proposed quantizer lies in improved robustness under aggressive low-bit quantization.
 
 \begin{table}[t]
 \centering
-\caption{Quantization-only comparison on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. ``\method\ quantizer'' denotes per-token-tile quantization with tile Hadamard(64) and residual length 128. Avg. is the full 16-task LongBench average.}
+\caption{Quantization-only comparison on Meta-Llama-3-8B-Instruct. ``\method\ quantizer'' denotes per-token-tile quantization with tile Hadamard(64) and residual length 128. Avg. is the full 16-task LongBench average.}
 \label{tab:appendix-quant-llama3}
 \setlength{\tabcolsep}{4pt}
 \resizebox{\textwidth}{!}{
@@ -659,11 +677,11 @@ Table~\ref{tab:appendix-quant-crossmodel} summarizes the same comparison on addi
 \toprule
 Setting & Bit & NarrativeQA & HotpotQA & GovReport & TREC & PCount & LCC & Avg. \\
 \midrule
-KIVI-style & 4-bit & \textbf{24.26} & 46.06 & 29.53 & \textbf{74.00} & \textbf{6.50} & 54.07 & \textbf{42.87} \\
+KIVI & 4-bit & \textbf{24.26} & 46.06 & 29.53 & \textbf{74.00} & \textbf{6.50} & 54.07 & \textbf{42.87} \\
 \method\ quantizer & 4-bit & 22.47 & \textbf{46.07} & \textbf{30.03} & 73.50 & 5.50 & \textbf{57.20} & 42.72 \\
-KIVI-style & 3-bit & 20.81 & 45.64 & \textbf{29.35} & \textbf{74.00} & 6.75 & \textbf{60.94} & \textbf{41.80} \\
+KIVI & 3-bit & 20.81 & 45.64 & \textbf{29.35} & \textbf{74.00} & 6.75 & \textbf{60.94} & \textbf{41.80} \\
 \method\ quantizer & 3-bit & \textbf{21.64} & \textbf{46.62} & 29.16 & 73.50 & \textbf{7.00} & 53.66 & 41.48 \\
-KIVI-style & 2-bit & 16.55 & 27.50 & 23.91 & \textbf{58.00} & 2.00 & 27.03 & 26.94 \\
+KIVI & 2-bit & 16.55 & 27.50 & 23.91 & \textbf{58.00} & 2.00 & 27.03 & 26.94 \\
 \method\ quantizer & 2-bit & \textbf{17.90} & \textbf{37.93} & \textbf{25.63} & 55.50 & \textbf{3.00} & \textbf{30.37} & \textbf{30.59} \\
 \bottomrule
 \end{tabular}}
@@ -671,7 +689,7 @@ KIVI-style & 2-bit & 16.55 & 27.50 & 23.91 & \textbf{58.00} & 2.00 & 27.03 & 26.
 
 \begin{table}[t]
 \centering
-\caption{Cross-model averages for the quantization-only comparison. Meta-Llama-3-8B-Instruct and Llama-2-7B use full LongBench; Mistral-7B-v0.1 uses the same six focal LongBench tasks as in the main text. $\Delta$ is ``\method\ quantizer minus KIVI-style''.}
+\caption{Cross-model averages for the quantization-only comparison. Meta-Llama-3-8B-Instruct and Llama-2-7B use full LongBench; Mistral-7B-v0.1 uses the same six representative LongBench tasks as in the main text. $\Delta$ is ``\method\ quantizer minus KIVI''.}
 \label{tab:appendix-quant-crossmodel}
 \setlength{\tabcolsep}{3.5pt}
 \resizebox{\textwidth}{!}{
@@ -681,7 +699,7 @@ Model & Protocol & KIVI 4-bit & \method\ 4-bit & $\Delta$ & KIVI 3-bit & \method
 \midrule
 Meta-Llama-3-8B-Instruct & full LongBench & 42.87 & 42.72 & -0.15 & 41.80 & 41.48 & -0.32 & 26.94 & \textbf{30.59} & \textbf{+3.65} \\
 Llama-2-7B & full LongBench & 28.09 & \textbf{28.33} & \textbf{+0.24} & \textbf{28.23} & 27.82 & -0.41 & \textbf{24.33} & 24.17 & -0.16 \\
-Mistral-7B-v0.1 & six focal LongBench tasks & \textbf{31.19} & 30.78 & -0.41 & \textbf{30.16} & 29.52 & -0.64 & 23.91 & \textbf{25.72} & \textbf{+1.81} \\
+Mistral-7B-v0.1 & six representative LongBench tasks & \textbf{31.19} & 30.78 & -0.41 & \textbf{30.16} & 29.52 & -0.64 & 23.91 & \textbf{25.72} & \textbf{+1.81} \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -698,13 +716,13 @@ Table~\ref{tab:appendix-diffsparse-llama7b}, Table~\ref{tab:appendix-diffsparse-
 
 \begin{table}[t]
 \centering
-\caption{Task-level sparse-only results on Llama-2-7B~\cite{touvron2023llama2} over six focal LongBench tasks.}
+\caption{Task-level sparse-only results on Llama-2-7B~\cite{touvron2023llama2} over six representative LongBench tasks.}
 \label{tab:appendix-diffsparse-llama7b}
 \setlength{\tabcolsep}{4pt}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{lccccccc}
 \toprule
-Method & NarrativeQA & Qasper & MultiFieldQA\_EN & HotpotQA & TREC & LCC & Avg. \\
+Method & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
 \midrule
 Uniform-50 & 15.04 & 9.05 & 20.90 & 7.39 & 66.00 & 66.88 & 30.88 \\
 Differential-50 & 16.94 & 9.05 & 22.92 & 7.39 & 66.00 & 66.91 & 31.54 \\
@@ -717,13 +735,13 @@ Differential-70 & 15.00 & 7.88 & 22.73 & 6.96 & 65.50 & 66.59 & 30.78 \\
 
 \begin{table}[t]
 \centering
-\caption{Task-level sparse-only results on Qwen2.5-7B-Instruct~\cite{yang2024qwen25} over six focal LongBench tasks.}
+\caption{Task-level sparse-only results on Qwen2.5-7B-Instruct~\cite{yang2024qwen25} over six representative LongBench tasks.}
 \label{tab:appendix-diffsparse-qwen}
 \setlength{\tabcolsep}{4pt}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{lccccccc}
 \toprule
-Method & NarrativeQA & Qasper & MultiFieldQA\_EN & HotpotQA & TREC & LCC & Avg. \\
+Method & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
 \midrule
 Uniform-50 & 9.73 & 11.62 & 29.88 & 9.03 & 69.50 & 59.63 & 31.56 \\
 Differential-50 & 9.73 & 12.05 & 29.88 & 9.03 & 69.50 & 59.86 & 31.68 \\
@@ -742,7 +760,7 @@ Differential-70 & 9.33 & 11.72 & 28.61 & 9.68 & 69.00 & 59.11 & 31.24 \\
 \resizebox{\textwidth}{!}{
 \begin{tabular}{lccccccc}
 \toprule
-Method & NarrativeQA & Qasper & MultiFieldQA\_EN & HotpotQA & TREC & LCC & Avg. \\
+Method & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
 \midrule
 Uniform-50 & 12.99 & 28.89 & 39.92 & 26.24 & 67.50 & 53.46 & 38.17 \\
 Differential-50 & 12.99 & 29.46 & 40.37 & 26.24 & 67.50 & 53.46 & 38.34 \\
@@ -761,7 +779,7 @@ Differential-70 & 13.38 & 26.98 & 40.65 & 26.67 & 67.00 & 53.44 & 38.02 \\
 \resizebox{\textwidth}{!}{
 \begin{tabular}{lccccccc}
 \toprule
-Method & NarrativeQA & Qasper & MultiFieldQA\_EN & HotpotQA & TREC & LCC & Avg. \\
+Method & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
 \midrule
 Uniform-70 & 7.03 & 5.62 & 13.52 & 13.91 & 51.00 & 57.59 & 24.78 \\
 Differential-70 & 11.19 & 6.97 & 17.46 & 13.91 & 70.00 & 65.11 & 30.77 \\
@@ -936,7 +954,7 @@ Budget & Task & Final decision & $[p_0,p_1,p_2]$ & $[\rho_0,\rho_1,\rho_2]$ & No
 \section{Additional Joint Sparse-Quant Results}
 \label{app:joint-details}
 
-This appendix provides additional task-level results for the joint sparse-quant comparison summarized in Table~\ref{tab:cross-model}. Since Meta-Llama-3-8B-Instruct is already reported in detail in Table~\ref{tab:main-accuracy}, we focus here on the additional model families. For each model, we report results on the same six focal LongBench tasks used in the main text: NarrativeQA, Qasper, MultiFieldQA-EN, HotpotQA, TREC, and LCC.
+This appendix provides additional task-level results for the joint sparse-quant comparison summarized in Table~\ref{tab:cross-model}. Since Meta-Llama-3-8B-Instruct is already reported in detail in Table~\ref{tab:main-accuracy}, we focus here on the additional model families. For each model, we report results on the same six focal LongBench tasks used in the main text: NarrativeQA, Qasper, \multifieldqa, HotpotQA, TREC, and LCC.
 
 Overall, the task-level breakdowns are consistent with the trend reported in the main text. The gains of \method\ over the sequential M+K baseline are more visible under tighter compression budgets, whereas the milder 50/50 settings remain more mixed. In particular, improvements often concentrate on a subset of tasks rather than appearing uniformly across all six tasks.
 
@@ -948,7 +966,7 @@ Overall, the task-level breakdowns are consistent with the trend reported in the
 \resizebox{\textwidth}{!}{
 \begin{tabular}{lccccccc}
 \toprule
-Setting & NarrativeQA & Qasper & MultiFieldQA\_EN & HotpotQA & TREC & LCC & Avg. \\
+Setting & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
 \midrule
 M+K, 50/50 + 4-bit & 15.91 & \textbf{9.26} & 21.91 & 7.45 & \textbf{66.00} & 67.49 & 31.34 \\
 \method, 50/50 + 4-bit & \textbf{15.93} & 8.70 & \textbf{22.51} & \textbf{7.58} & \textbf{66.00} & \textbf{67.50} & \textbf{31.37} \\
@@ -970,7 +988,7 @@ M+K, 70/70 + 2-bit & \textbf{15.96} & 7.68 & \textbf{21.29} & 7.05 & 63.50 & 64.
 \resizebox{\textwidth}{!}{
 \begin{tabular}{lccccccc}
 \toprule
-Setting & NarrativeQA & Qasper & MultiFieldQA\_EN & HotpotQA & TREC & LCC & Avg. \\
+Setting & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
 \midrule
 M+K, 50/50 + 4-bit & 13.12 & 8.47 & \textbf{30.73} & \textbf{9.44} & \textbf{69.00} & \textbf{66.31} & 32.84 \\
 \method, 50/50 + 4-bit & \textbf{13.60} & \textbf{8.91} & 30.69 & 9.37 & \textbf{69.00} & 65.84 & \textbf{32.90} \\
@@ -992,7 +1010,7 @@ M+K, 70/70 + 2-bit & 12.17 & 7.11 & 24.22 & \textbf{9.52} & 64.50 & 63.35 & 30.1
 \resizebox{\textwidth}{!}{
 \begin{tabular}{lccccccc}
 \toprule
-Setting & NarrativeQA & Qasper & MultiFieldQA\_EN & HotpotQA & TREC & LCC & Avg. \\
+Setting & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
 \midrule
 M+K, 50/50 + 4-bit & 15.37 & 17.82 & 26.34 & 27.20 & 64.50 & 35.82 & 31.17 \\
 \method, 50/50 + 4-bit & \textbf{17.64} & \textbf{29.76} & \textbf{34.02} & \textbf{31.52} & \textbf{65.00} & \textbf{44.53} & \textbf{37.08} \\
