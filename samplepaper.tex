@@ -7,6 +7,7 @@
 \usepackage{float}
 \usepackage{multirow}
 \usepackage{placeins}
+\usepackage{wrapfig}
 \usepackage{tikz}
 \usetikzlibrary{decorations.pathreplacing,calc}
 
@@ -18,11 +19,17 @@
 \renewcommand{\bottomfraction}{0.9}
 \renewcommand{\textfraction}{0.05}
 \renewcommand{\floatpagefraction}{0.8}
-\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
-\setlength{\floatsep}{8pt plus 2pt minus 2pt}
-\setlength{\intextsep}{8pt plus 2pt minus 2pt}
-\setlength{\abovecaptionskip}{5pt plus 1pt minus 1pt}
+\setlength{\textfloatsep}{6pt plus 1pt minus 1pt}
+\setlength{\floatsep}{5pt plus 1pt minus 1pt}
+\setlength{\intextsep}{5pt plus 1pt minus 1pt}
+\setlength{\abovecaptionskip}{3pt plus 1pt minus 1pt}
 \setlength{\belowcaptionskip}{0pt}
+\setlength{\abovedisplayskip}{5pt plus 1pt minus 1pt}
+\setlength{\belowdisplayskip}{5pt plus 1pt minus 1pt}
+\setlength{\abovedisplayshortskip}{3pt plus 1pt minus 1pt}
+\setlength{\belowdisplayshortskip}{3pt plus 1pt minus 1pt}
+\setlength{\jot}{2pt}
+\renewcommand{\arraystretch}{0.96}
 
 \newcommand{\method}{JSQKV}
 \newcommand{\attnscorefigdir}{figures/attnscorecrossfigdir}
@@ -66,7 +73,9 @@ Xiaoli Gong\inst{1}\thanks{Corresponding author.}}
 
 As long-context large language models become increasingly widespread, autoregressive decoding is increasingly bottlenecked by KV-cache footprint and memory bandwidth. Existing KV-cache compression methods typically rely on sparsification or low-bit quantization, but simply combining the two often fails to simultaneously preserve model accuracy and deliver real system-level gains.
 We present JSQKV, a joint sparse-quant framework for KV-cache compression and decode acceleration that codesigns compression policy, numerical representation, and execution path. JSQKV introduces an attention-score-based differential sparsification strategy with a dual-window online execution mechanism, together with a Hadamard-based Per-Token-Tile quantization scheme and a bitmap-based sparse-quant format with a matching decode kernel. This co-design enables compressed KV-cache data to remain compact in memory while being effectively translated into reduced memory traffic and end-to-end speedup.
-Experimental results show that, under matched compression budgets, JSQKV generally compares favorably with the sequential MUSTAFAR+KIVI baseline on LongBench, with larger gains under more aggressive sparse-quant settings. On Meta-Llama-3-8B-Instruct, with input length 4096 and output length 256, JSQKV improves end-to-end throughput by 44.2\% over the dense baseline at batch size 4 using 70\% KV sparsity and 2-bit quantization, while increasing the KV-cache compression ratio to 3.48$\times$. These results suggest that efficient KV-cache compression benefits from joint optimization across compression policy, numerical representation, and execution path. \paperavailability
+Experimental results show that, under matched compression budgets, \method\ generally outperforms the sequential MUSTAFAR+KIVI baseline on LongBench, with larger gains under more aggressive sparse-quant settings. On Llama-3-8B, \method\ improves end-to-end throughput by 44.2\% over dense decoding in a long-context setting, while increasing the KV-cache compression ratio to 3.48$\times$. These results support jointly optimizing compression policy, numerical representation, and execution path for efficient KV-cache compression. 
+% \paperavailability
+% Experimental results show that, under matched compression budgets, JSQKV generally compares favorably with the sequential MUSTAFAR+KIVI baseline on LongBench, with larger gains under more aggressive sparse-quant settings. On Llama-3-8B-Instruct, with input length 4096 and output length 256, JSQKV improves end-to-end throughput by 44.2\% over the dense baseline at batch size 4 using 70\% KV sparsity and 2-bit quantization, while increasing the KV-cache compression ratio to 3.48$\times$. These results suggest that efficient KV-cache compression benefits from joint optimization across compression policy, numerical representation, and execution path. \paperavailability
 
 \keywords{KV-cache compression \and Sparsity \and Quantization}
 \end{abstract}
@@ -74,49 +83,66 @@ Experimental results show that, under matched compression budgets, JSQKV general
 \section{Introduction}
 \label{sec:intro}
 
-As context windows continue to grow in large language models~\cite{peng2023yarn,ding2024longrope}, autoregressive decoding is increasingly bottlenecked by KV-cache footprint and memory bandwidth~\cite{kwon2023pagedattention,zhong2024distserve}. The KV cache grows linearly with context length, while decoding offers limited parallelism and repeatedly accesses the KV cache, making it more memory-bound than the prefill stage~\cite{kwon2023pagedattention,agrawal2024sarathiserve,zhong2024distserve}. In long-context settings, this bottleneck further limits throughput, batch size, and deployment efficiency~\cite{kwon2023pagedattention,agrawal2024sarathiserve}.
+As context windows continue to grow in large language models, autoregressive decoding is increasingly bottlenecked by KV-cache footprint and memory bandwidth~\cite{ding2024longrope}. Since the KV cache grows linearly with context length and is repeatedly accessed during decoding, this stage is more memory-bound than prefill and increasingly limits throughput, batch size, and deployment efficiency in long-context settings~\cite{kwon2023pagedattention,agrawal2024sarathiserve}.
 
-Prior work on KV-cache optimization mainly follows two directions. One line reduces the amount of retained history through token eviction or sparsification. Representative methods such as StreamingLLM~\cite{xiao2024streaming}, H$_2$O~\cite{zhang2023h2o}, SnapKV~\cite{snapkv}, and PyramidKV~\cite{pyramidkv} retain only selected historical tokens, while ThinK~\cite{xu2025think}, KVPruner~\cite{lv2024kvpruner}, and MUSTAFAR~\cite{joo2025mustafar} further explore channel-wise, structured, and unstructured sparsity. These studies show that historical tokens are not equally important and that importance-aware cache reduction can effectively relieve memory and bandwidth pressure. The other line compresses the numerical representation of KV-cache elements through low-bit quantization. KVQuant~\cite{hooper2024kvquant}, QuaRot~\cite{ashkboos2024quarot}, and KIVI~\cite{liu2024kivi} explore ultra-low-bit KV representation, distribution reshaping, and asymmetric quantization for Keys and Values. These methods directly reduce KV-cache footprint and bandwidth cost, but they mainly focus on how to quantize each cache element rather than which historical information should be retained.
+Prior work on KV-cache optimization mainly follows two directions. One line reduces the amount of retained history through token eviction or sparsification. Representative methods such as StreamingLLM~\cite{xiao2024streaming}, H$_2$O~\cite{zhang2023h2o}, SnapKV~\cite{snapkv}, and PyramidKV~\cite{pyramidkv} retain only selected historical tokens, while ThinK~\cite{xu2025think}, KVPruner~\cite{lv2024kvpruner}, and MUSTAFAR~\cite{joo2025mustafar} further explore channel-wise, structured, and unstructured sparsity. The other line compresses the numerical representation of KV-cache elements through low-bit quantization. KVQuant~\cite{hooper2024kvquant}, QuaRot~\cite{ashkboos2024quarot}, and KIVI~\cite{liu2024kivi} explore ultra-low-bit KV representation, distribution reshaping, and asymmetric quantization for Keys and Values. These methods directly reduce KV-cache footprint and bandwidth cost, but they mainly focus on how to quantize each cache element rather than which historical information should be retained.
 
 Overall, prior work shows that both sparsification and quantization are effective, but the two are still largely studied in isolation. In practice, joint compression is not a simple sequential combination: once sparsification changes the retained tokens and cache access pattern, the appropriate quantization granularity, compressed data layout, and decode-time kernel design also change. Without such co-design, algorithm-level compression gains may not reliably translate into practical end-to-end speedups~\cite{agrawal2024sarathiserve,zhong2024distserve}.
 
 To address this issue, we propose \method, a joint sparse-quant framework for KV-cache compression and decode acceleration. \method\ jointly designs compression policy, numerical representation, and execution path. The key idea is simple: allocate different compression budgets to different tokens according to their importance to future attention, compress the remaining KV states with a token-aligned and numerically stable low-bit representation, and keep the KV cache compressed in memory as much as possible until dense tiles are required by the decode kernel. Through this joint design, \method\ keeps the KV cache compact in memory while more effectively reducing memory traffic and improving end-to-end throughput.
 
+% The main contributions of this paper are as follows:
+% \begin{itemize}
+%     \item We propose an attention-score-based differential sparsification policy that assigns different sparsity levels to different historical tokens at the token level, instead of applying a single global compression ratio.
+%     \item We design a dual-window online execution mechanism for autoregressive decoding, extending differential sparsification from the prefill stage to online decoding.
+%     \item We propose a Hadamard-based Per-Token-Tile quantization method to mitigate low-bit quantization instability caused by Key outliers and to better align quantization granularity with token-level compression decisions.
+%     \item We design a bitmap-based sparse-quant format and a matching decode kernel that keep the compressed KV cache compact in memory and turn compression into reduced memory traffic and end-to-end decoding speedup.
+% \end{itemize}
+
 The main contributions of this paper are as follows:
 \begin{itemize}
-    \item We propose an attention-score-based differential sparsification policy that assigns different sparsity levels to different historical tokens at the token level, instead of applying a single global compression ratio.
-    \item We design a dual-window online execution mechanism for autoregressive decoding, extending differential sparsification from the prefill stage to online decoding.
-    \item We propose a Hadamard-based Per-Token-Tile quantization method to mitigate low-bit quantization instability caused by Key outliers and to better align quantization granularity with token-level compression decisions.
-    \item We design a bitmap-based sparse-quant format and a matching decode kernel that keep the compressed KV cache compact in memory and turn compression into reduced memory traffic and end-to-end decoding speedup.
+    \item We propose an attention-score-based differential sparsification policy that assigns different sparsity levels to historical tokens under a fixed average compression budget.
+    \item We design a dual-window online execution mechanism that extends this differential policy from prefill to autoregressive decoding.
+    \item We propose Hadamard-based Per-Token-Tile quantization to stabilize low-bit KV representation and align quantization granularity with token-level compression decisions.
+    \item We design a bitmap-based sparse-quant format and matching decode kernel that convert compressed KV-cache representations into reduced memory traffic and practical decode-time speedup.
 \end{itemize}
 
-Experimental results show that \method\ achieves a favorable balance between model quality and system efficiency under high compression ratios. On Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}, with 70\% KV cache sparsity and 2-bit quantization, \method\ improves end-to-end throughput by approximately 44.2\% over the dense baseline in a long-context decoding setting with batch size 4. Under matched compression budgets, \method\ generally compares favorably with the sequential MUSTAFAR+KIVI baseline, with larger gains under more aggressive sparse-quant settings. These results support the motivation of treating KV-cache compression as a joint optimization problem across compression policy, numerical representation, and execution path.
+
+% Experimental results show that \method\ achieves a favorable balance between model quality and system efficiency under high compression ratios. On Llama-3-8B-Instruct~\cite{grattafiori2024llama3}, with 70\% KV cache sparsity and 2-bit quantization, \method\ improves end-to-end throughput by approximately 44.2\% over the dense baseline in a long-context decoding setting with batch size 4. Under matched compression budgets, \method\ generally compares favorably with the sequential MUSTAFAR+KIVI baseline, with larger gains under more aggressive sparse-quant settings. These results support the motivation of treating KV-cache compression as a joint optimization problem across compression policy, numerical representation, and execution path.
+
+Experiments show that \method\ achieves a favorable balance between model quality and system efficiency under high compression ratios. On Llama-3-8B-Instruct~\cite{grattafiori2024llama3}, \method\ improves end-to-end throughput by 44.2\% over dense decoding under 70\% KV sparsity and 2-bit quantization, and generally outperforms the sequential MUSTAFAR+KIVI baseline under matched compression budgets, especially in more aggressive sparse-quant settings.
 
 \section{Method}
 \label{sec:method}
 
 \subsection{Overview}
-\suppressfloats[t]
-
-Figure~\ref{fig:JSQKV-overview} summarizes the overall design of \method. Rather than applying sparsification and quantization as two independent post-processing steps, \method\ organizes them into a unified decode-stage pipeline in which the compression policy, low-bit representation, and execution path are designed together.
-
-The method consists of four tightly coupled components. First, \method\ uses prefill attention to estimate token importance and instantiates a budgeted differential sparsity policy, so that different historical tokens receive different retention budgets under a fixed average compression target. Second, because future attention is unavailable when a token is first generated during decoding, \method\ introduces a dual-window online execution mechanism that delays compression until enough future evidence has been accumulated. Third, after token-level compression decisions are made, the retained KV states are stored in a token-aligned low-bit form using Hadamard-based Per-Token-Tile quantization, which improves robustness to key outliers while matching the downstream sparse-quant execution granularity. Finally, \method\ uses a bitmap-based sparse-quant format and a matching decode kernel to keep the KV cache compact in memory and turn compression into reduced memory traffic and practical decode-time speedup.
-
-The remaining subsections describe these components in order. Section~\ref{sec:diff-sparsity} presents the budgeted differential sparsity policy, Section~\ref{sec:dual-window} introduces the dual-window online execution mechanism, Section~\ref{sec:quant} describes the token-aligned quantization design, and Section~\ref{sec:sparse-quant} presents the sparse-quant storage format and decode kernel.
-
 \begin{figure}[t]
 \centering
-\includegraphics[width=1\linewidth]{figures/JSQKV_Overview.drawio.pdf}
-\caption{Overview of JSQKV. The method first estimates token importance from prefill attention and instantiates a budgeted differential sparsity policy. It then extends this policy to autoregressive decoding through a dual-window online execution mechanism, represents retained KV states with Hadamard-based Per-Token-Tile quantization, and finally executes the compressed cache with a bitmap-based sparse-quant decode kernel to reduce memory traffic.}
+\includegraphics[width=0.96\linewidth]{figures/JSQKV_Overview.drawio.pdf}
+\caption{Overview of \method. The framework combines differential sparsity, dual-window online execution, Per-Token-Tile quantization with Hadamard rotation, and a bitmap-based sparse-quant decode path.}
+% \caption{Overview of JSQKV. The method first estimates token importance from prefill attention and instantiates a budgeted differential sparsity policy. It then extends this policy to autoregressive decoding through a dual-window online execution mechanism, represents retained KV states with Hadamard-based Per-Token-Tile quantization, and finally executes the compressed cache with a bitmap-based sparse-quant decode kernel to reduce memory traffic.}
 \label{fig:JSQKV-overview}
 \end{figure}
 
-\FloatBarrier
+Figure~\ref{fig:JSQKV-overview} summarizes the overall design of \method. Rather than applying sparsification and quantization as two independent post-processing steps, \method\ organizes them into a unified decode-stage pipeline that jointly designs compression policy, low-bit representation, and execution path. The framework consists of four tightly coupled components: a budgeted differential sparsity policy estimated from prefill attention, a dual-window online mechanism that delays compression until enough future evidence has been accumulated, Hadamard-based Per-Token-Tile quantization for the retained KV states, and a bitmap-based sparse-quant format with a matching decode kernel that keeps the KV cache compact in memory and translates compression into reduced memory traffic and practical decode-time speedup.
+
+% Figure~\ref{fig:JSQKV-overview} summarizes the overall design of \method. Rather than applying sparsification and quantization as two independent post-processing steps, \method\ organizes them into a unified decode-stage pipeline in which the compression policy, low-bit representation, and execution path are designed together.
+
+% The method consists of four tightly coupled components. First, \method\ uses prefill attention to estimate token importance and instantiates a budgeted differential sparsity policy, so that different historical tokens receive different retention budgets under a fixed average compression target. Second, because future attention is unavailable when a token is first generated during decoding, \method\ introduces a dual-window online execution mechanism that delays compression until enough future evidence has been accumulated. Third, after token-level compression decisions are made, the retained KV states are stored in a token-aligned low-bit form using Hadamard-based Per-Token-Tile quantization, which improves robustness to key outliers while matching the downstream sparse-quant execution granularity. Finally, \method\ uses a bitmap-based sparse-quant format and a matching decode kernel to keep the KV cache compact in memory and turn compression into reduced memory traffic and practical decode-time speedup.
+
+% The remaining subsections describe these components in order. Section~\ref{sec:diff-sparsity} presents the budgeted differential sparsity policy, Section~\ref{sec:dual-window} introduces the dual-window online execution mechanism, Section~\ref{sec:quant} describes the token-aligned quantization design, and Section~\ref{sec:sparse-quant} presents the sparse-quant storage format and decode kernel.
+
+
+% The framework consists of four tightly coupled components. First, \method\ uses prefill attention to estimate token importance and instantiates a budgeted differential sparsity policy, so that different historical tokens receive different retention budgets under a fixed average compression target. Second, because future attention is unavailable when a token is first generated during decoding, \method\ introduces a dual-window online execution mechanism that delays compression until enough future evidence has been accumulated. Third, after token-level compression decisions are made, the retained KV states are stored in a token-aligned low-bit form using Hadamard-based Per-Token-Tile quantization, which improves robustness to key outliers while matching the downstream sparse-quant execution granularity. Finally, \method\ uses a bitmap-based sparse-quant format and a matching decode kernel to keep the KV cache compact in memory and translate compression into reduced memory traffic and practical decode-time speedup.
 
 \subsection{Budgeted Differential Sparsity Policy}
 \label{sec:diff-sparsity}
 
-The first challenge in KV-cache compression is to allocate a fixed compression budget across historical tokens with different future importance. A uniform sparsity ratio treats all tokens equally, even though some tokens carry persistent evidence for future decoding while others are rarely used again. Under the same average budget, such a uniform policy can waste budget on unimportant tokens and over-compress important ones. To address this issue, \method\ estimates token importance from prefill attention and instantiates a three-level sparsity policy under an explicit average-budget constraint.
+% The first challenge in KV-cache compression is to allocate a fixed compression budget across historical tokens with different future importance. A uniform sparsity ratio treats all tokens equally, even though some tokens carry persistent evidence for future decoding while others are rarely used again. Under the same average budget, such a policy can waste budget on unimportant tokens and over-compress important ones. To address this issue, \method\ estimates token importance from prefill attention and instantiates a three-level sparsity policy under an explicit average-budget constraint.
+
+The first challenge in KV-cache compression is to allocate a fixed compression budget across historical tokens with different future importance. A uniform sparsity ratio treats all tokens equally, wasting budget on unimportant tokens and over-compressing important ones. To address this issue, \method\ estimates token importance from prefill attention and instantiates a three-level sparsity policy under an explicit average-budget constraint.
+
+% To allocate a fixed compression budget across tokens with different future importance, \method\ estimates token importance from prefill attention and instantiates a three-level sparsity policy under an average-budget constraint.
 
 We use the attention distribution in prefill to estimate the relative importance of historical tokens. Let $\mathbf{A} \in \mathbb{R}^{T_q \times T_k}$ denote the causal attention matrix of the prompt. Following the observation-window idea in SnapKV~\cite{snapkv}, we use the last $L_{\text{obs}}$ prompt tokens as an observation window. For a prefix token $j \leq T_k - L_{\text{obs}}$, its importance score is defined as
 \begin{equation}
@@ -124,10 +150,10 @@ s_j = \frac{T_k}{L_{\text{obs}}}
 \sum_{i=T_k-L_{\text{obs}}+1}^{T_k} A_{i,j}.
 \label{eq:importance}
 \end{equation}
-This score measures how much token $j$ is attended by the queries in the observation window. Tokens inside the observation window are treated as highly important and are preserved by construction. The normalization factor $T_k/L_{\text{obs}}$ makes the scores more comparable across prompts of different lengths.
+
+This score measures how much token $j$ is attended by queries in the observation window; tokens inside the observation window are preserved by construction, and the factor $T_k/L_{\text{obs}}$ makes scores more comparable across prompts of different lengths.
 
 Given the importance scores $\{s_j\}$, \method\ assigns each token to one of three compression levels. Let $[p_0, p_1, p_2]$ denote the target proportions of Level 0, Level 1, and Level 2 tokens, where
-
 \begin{equation}
 p_0 + p_1 + p_2 = 1.
 \end{equation}
@@ -156,69 +182,50 @@ k_{j,i}, & i \in \operatorname{TopK}\!\left(|\mathbf{k}_j|,\lfloor (1-\rho_1)d \
 \end{equation}
 where $\rho_1$ is the feature-level sparsity ratio for Level 1 tokens. The same rule is applied to $\mathbf{v}_j$. In this way, important tokens retain more information, while less important tokens absorb more of the compression budget.
 
-A fixed average sparsity budget does not uniquely determine the three-level policy. Different dense/partial/evict allocations can share the same average compression ratio but lead to different accuracy outcomes. We therefore instantiate the policy under an explicit budget constraint. Let
 
-\begin{equation}
-c = ([p_0, p_1, p_2], \rho_1)
-\end{equation}
-denote one candidate configuration. With $\rho_0 = 0$ for Level 0 and $\rho_2 = 1$ for Level 2, the target average sparsity budget $B$ satisfies
+A fixed average sparsity budget does not uniquely determine the three-level policy: different dense/partial/evict allocations can share the same average compression ratio but lead to different accuracy outcomes. We therefore instantiate the policy under an explicit budget constraint. With $\rho_0 = 0$ for Level 0 and $\rho_2 = 1$ for Level 2, the target average sparsity budget $B$ satisfies
 \begin{equation}
 B = p_0 \rho_0 + p_1 \rho_1 + p_2 \rho_2 = p_1 \rho_1 + p_2.
 \label{eq:budget_constraint}
 \end{equation}
-For a given target budget $B$, we search over a small feasible set of $(p_0, \rho_1)$ pairs and analytically recover the remaining proportions:
-\begin{equation}
-p_1 = \frac{1 - p_0 - B}{1 - \rho_1},
-\qquad
-p_2 = 1 - p_0 - p_1.
-\label{eq:budget_solver}
-\end{equation}
-Candidates with invalid proportions are discarded. We then select the final configuration on a small calibration split:
-\begin{equation}
-c^\star = \arg\max_{c \in \mathcal{C}(B)} \mathrm{Metric}(D_{\mathrm{cal}}; c),
-\label{eq:calibration_objective}
-\end{equation}
-where $\mathcal{C}(B)$ is the feasible candidate set under budget $B$. This procedure keeps the overall compression target fixed while allowing \method\ to allocate the budget more carefully across dense, partially sparse, and evicted tokens.
+For a given target budget $B$, we search over a small feasible set of $(p_0,\rho_1)$ pairs, recover the remaining proportions analytically, and select the final configuration on a small calibration split. This keeps the overall compression target fixed while allowing \method\ to allocate the budget more carefully across dense, partially sparse, and evicted tokens.
+
+% A fixed average sparsity budget does not uniquely determine the three-level policy. Different dense/partial/evict allocations can share the same average compression ratio but lead to different accuracy outcomes. We therefore instantiate the policy under an explicit budget constraint. Let
+
+% \begin{equation}
+% c = ([p_0, p_1, p_2], \rho_1)
+% \end{equation}
+% denote one candidate configuration. With $\rho_0 = 0$ for Level 0 and $\rho_2 = 1$ for Level 2, the target average sparsity budget $B$ satisfies
+% \begin{equation}
+% B = p_0 \rho_0 + p_1 \rho_1 + p_2 \rho_2 = p_1 \rho_1 + p_2.
+% \label{eq:budget_constraint}
+% \end{equation}
+% For a given target budget $B$, we search over a small feasible set of $(p_0, \rho_1)$ pairs and analytically recover the remaining proportions:
+% \begin{equation}
+% p_1 = \frac{1 - p_0 - B}{1 - \rho_1},
+% \qquad
+% p_2 = 1 - p_0 - p_1.
+% \label{eq:budget_solver}
+% \end{equation}
+% Candidates with invalid proportions are discarded. We then select the final configuration on a small calibration split:
+% \begin{equation}
+% c^\star = \arg\max_{c \in \mathcal{C}(B)} \mathrm{Metric}(D_{\mathrm{cal}}; c),
+% \label{eq:calibration_objective}
+% \end{equation}
+% where $\mathcal{C}(B)$ is the feasible candidate set under budget $B$. This procedure keeps the overall compression target fixed while allowing \method\ to allocate the budget more carefully across dense, partially sparse, and evicted tokens.
+
 
 \subsection{Dual-Window Online Execution Mechanism}
 \label{sec:dual-window}
 
-The policy in Section~\ref{sec:diff-sparsity} relies on future attention observations that are available in prefill but unavailable when a token is first generated during decoding. As a result, the token-level compression policy cannot be applied immediately after a token is written into the KV cache. To make the same policy work during autoregressive decoding, \method\ introduces a dual-window online execution mechanism that delays compression until each token has accumulated enough future attention evidence.
+The policy in Section~\ref{sec:diff-sparsity} relies on future attention observations, which are available in prefill but unavailable when a token is first generated during decoding, so token-level compression cannot be applied immediately after the token is written into the KV cache. To make the same policy work online, \method\ introduces a dual-window mechanism that delays compression until each token has accumulated sufficient future attention evidence.
 
-During decoding, the KV cache is organized into two consecutive windows of size $W$, as illustrated in Fig.~\ref{fig:dual-window}. Window A stores tokens waiting to be compressed, while Window B stores newly generated tokens whose queries provide additional attention observations for Window A. This design avoids compressing a token too early, before it has accumulated enough future attention observations.
-
-When a new query $\mathbf{q}_t$ is produced at decoding step $t$, we compute its attention to the tokens in Window A:
-
-\begin{equation}
-\boldsymbol{\alpha}_t =
-\operatorname{softmax}\!\left(
-\frac{\mathbf{q}_t \mathbf{K}_A^\top}{\sqrt{d}}
-\right),
-\end{equation}
-where $\mathbf{K}_A$ denotes the key states of Window A. The resulting attention scores are accumulated in an attention buffer
-\begin{equation}
-\mathbf{Acc} \in \mathbb{R}^{N_b \times H \times W},
-\end{equation}
-
-where $N_b$ is the batch size, $H$ is the number of attention heads, and $W$ is the window size.
-
-When Window B becomes full, tokens in Window A have received different numbers of future observations, since earlier tokens are visible to more later queries. We therefore normalize the accumulated attention before reusing it as the token-importance signal. For the token at position $i \in \{0,\dots,W-1\}$ in Window A, where $i$ is zero-indexed, the number of observations is
-\begin{equation}
-N^{(i)} = 2W - 1 - i,
-\end{equation}
-which yields the normalized score
-\begin{equation}
-\bar{\alpha}^{(i)} =
-\frac{\mathbf{Acc}[:,:,i]}{N^{(i)}}.
-\end{equation}
-We then compare the normalized scores against the thresholds $(\tau_{\text{high}}, \tau_{\text{low}})$ from Section~\ref{sec:diff-sparsity}. Each token in Window A is assigned to Level 0, Level 1, or Level 2 accordingly.
-
-After the classification, \method\ applies the corresponding compression rule to Window A: Level 0 tokens remain dense, Level 1 tokens are partially pruned, and Level 2 tokens are removed. The compressed Window A is then merged into the historical compressed region, the previous Window B becomes the new Window A, the accumulator is reset, and decoding continues with an empty new Window B. In this way, each token is observed before compression while the number of uncompressed tokens remains bounded by $O(W)$.
+During decoding, the KV cache is organized into two consecutive windows of size $W$, as illustrated in Fig.~\ref{fig:dual-window}. Window A stores tokens waiting to be compressed, while Window B stores newly generated tokens whose queries provide additional attention observations for Window A.
 
 \begin{figure}[t]
 \centering
 \begin{tikzpicture}[
-scale=0.95,
+scale=0.94,
 line width=0.7pt,
 every node/.style={font=\footnotesize},
 brace/.style={decorate, decoration={brace, amplitude=4.5pt, mirror}, draw=black!65}
@@ -245,64 +252,48 @@ node[midway, below=8pt, align=center] {Window A\\[-1mm](to compress)};
 node[midway, below=8pt, align=center] {Window B\\[-1mm](observation)};
 \node[text=black!70] at (7.85,1.36) {Newly generated tokens};
 \end{tikzpicture}
-\caption{Dual-window online execution mechanism during decoding. Window A accumulates attention statistics before compression, while Window B collects newly generated tokens and provides future observations.}
+\caption{Dual-window online execution during decoding. Window A accumulates attention statistics before compression, while Window B collects newly generated tokens and provides future observations.}
 \label{fig:dual-window}
 \end{figure}
+
+When a new query $\mathbf{q}_t$ is produced at decoding step $t$, we compute its attention to the tokens in Window A:
+\begin{equation}
+\boldsymbol{\alpha}_t =
+\operatorname{softmax}\!\left(
+\frac{\mathbf{q}_t \mathbf{K}_A^\top}{\sqrt{d}}
+\right),
+\end{equation}
+where $\mathbf{K}_A$ denotes the key states of Window A. These scores are accumulated across subsequent decoding steps in an attention buffer $\mathbf{Acc}$, whose $i$-th entry stores the total future attention received by the $i$-th token in Window A while the current Window B is being filled.
+
+Because earlier tokens in Window A are visible to more later queries, accumulated attention must be normalized before thresholding. For the token at position $i \in \{0,\dots,W-1\}$ in Window A, the number of observations is
+\begin{equation}
+N^{(i)} = 2W - 1 - i,
+\end{equation}
+which gives the normalized score
+\begin{equation}
+\bar{\alpha}^{(i)} =
+\frac{\mathbf{Acc}[:,:,i]}{N^{(i)}}.
+\end{equation}
+We then compare the normalized scores against the thresholds $(\tau_{\text{high}}, \tau_{\text{low}})$ from Section~\ref{sec:diff-sparsity} and assign each token in Window A to Level 0, Level 1, or Level 2.
+
+After classification, Level 0 tokens remain dense, Level 1 tokens are partially pruned, and Level 2 tokens are removed. The compressed Window A is merged into the historical compressed region, Window B becomes the new Window A, the accumulator is reset, and decoding continues with a new empty Window B. In this way, each token is observed before compression while the number of uncompressed tokens remains bounded by $O(W)$.
 
 \subsection{Per-Token-Tile Quantization with Hadamard Rotation}
 \label{sec:quant}
 
-The remaining nonzero KV states still require a low-bit representation to reduce storage and memory traffic. Since token-level compression decisions are carried through the downstream sparse-quant operators, which are likewise organized as tiles along the token dimension, quantization should follow the same granularity. We therefore adopt \emph{Per-Token-Tile} quantization, which aligns the quantization unit with both token-level compression decisions and the tile-based decode path, while providing a fine-grained low-bit representation.
-
-For a token vector $\mathbf{x}_t \in \mathbb{R}^d$ (either key or value), the feature dimension is partitioned into $M=d/g$ contiguous tiles of size $g$:
-\begin{equation}
-\mathbf{x}_t = [\mathbf{x}_{t,1},\mathbf{x}_{t,2},\ldots,\mathbf{x}_{t,M}], \qquad \mathbf{x}_{t,m} \in \mathbb{R}^{g}.
-\end{equation}
-Each tile is quantized independently with its own scale $s_{t,m}$ and zero point $z_{t,m}$. The quantized tile is computed as
-\begin{equation}
-\mathbf{q}_{t,m}
-=
-\operatorname{clip}\!\left(
-\operatorname{round}\!\left(
-\frac{\mathbf{x}_{t,m}-z_{t,m}}{s_{t,m}}
-\right),
-0,\,
-2^b-1
-\right),
-\end{equation}
-where $b$ is the quantization bitwidth. This design keeps the quantization parameters aligned with the token-level compression decision while reducing the local dynamic range within each tile.
-
-A remaining challenge is that key states often contain outlier values, which can dominate the quantization range and make aggressive low-bit quantization unstable. To mitigate this effect, \method\ applies a Hadamard rotation to queries and keys before quantization. Let $\mathbf{H} \in \mathbb{R}^{d \times d}$ denote the normalized Hadamard matrix. We rotate
-\begin{equation}
-\tilde{\mathbf{q}}_i = \frac{1}{\sqrt{d}}\mathbf{H}\mathbf{q}_i,
-\qquad
-\tilde{\mathbf{k}}_j = \frac{1}{\sqrt{d}}\mathbf{H}\mathbf{k}_j.
-\end{equation}
-Because the Hadamard matrix is orthogonal, the attention score is preserved:
-\begin{equation}
-\tilde{\mathbf{q}}_i^\top \tilde{\mathbf{k}}_j
-=
-\mathbf{q}_i^\top \mathbf{k}_j.
-\end{equation}
-
-The rotation therefore improves the distribution seen by the quantizer without changing the attention computation itself.
-
-Figure~\ref{fig:hadamard} illustrates the effect of the Hadamard rotation on key states. After rotation, the heavy tail is noticeably suppressed, which reduces the dominance of outliers in low-bit quantization. At the same time, the rotated distribution does not collapse into a fully uniform one, and still preserves sufficient magnitude variation for subsequent magnitude-based feature sparsification.
-
-Table~\ref{tab:hadamard_sparse_quant} further supports this observation quantitatively on WikiText-2. Under quantization-only settings, Hadamard rotation improves PPL at 4-bit, 3-bit, and especially 2-bit, supporting its role in stabilizing low-bit quantization. When 50\% KV sparsity is further applied, the same trend remains visible at 3-bit and 2-bit, where Rotate still outperforms RTN by a meaningful margin. At 4-bit with added sparsity, however, the gain becomes marginal and slightly reverses, suggesting that when quantization error is already relatively small, the rotation-induced mixing may mildly weaken the magnitude separability used by subsequent sparsification. Overall, Per-Token-Tile quantization provides a fine-grained low-bit representation, while Hadamard rotation appears to improve robustness to key outliers without largely disrupting subsequent sparsification.
-
-\begin{figure}[t]
+\begin{figure}[tbp]
 \centering
-\includegraphics[width=0.92\textwidth]{figures/hadamard_activation_cropped.pdf}
+\includegraphics[width=0.86\textwidth]{figures/hadamard_activation_cropped.pdf}
 \caption{Key-state activation distribution before and after Hadamard rotation on a LLaMA2-7B sample. The rotation suppresses heavy tails while preserving enough variation for feature-level sparsification.}
 \label{fig:hadamard}
 \end{figure}
 
-\begin{table}[t]
+\begin{table}[tbp]
     \centering
+    \small
     \caption{PPL of RTN and Hadamard rotation (\textit{Rotate}) on WikiText-2 under quantization-only and sparse-quant settings. Hadamard rotation improves low-bit quantization stability, while remaining compatible with subsequent KV sparsification.}
     \label{tab:hadamard_sparse_quant}
-    \setlength{\tabcolsep}{5pt}
+    \setlength{\tabcolsep}{4pt}
     \begin{tabular}{lcccccc}
         \toprule
         & \multicolumn{2}{c}{4-bit} & \multicolumn{2}{c}{3-bit} & \multicolumn{2}{c}{2-bit} \\
@@ -323,19 +314,51 @@ Table~\ref{tab:hadamard_sparse_quant} further supports this observation quantita
     \end{tabular}
 \end{table}
 
-\FloatBarrier
+The remaining nonzero KV states still require a low-bit representation to reduce storage and memory traffic. Because token-level compression decisions must be carried through the downstream sparse-quant operators, we adopt \emph{Per-Token-Tile} quantization, which aligns the quantization unit with both token-level compression decisions and the tile-based decode path while still providing a fine-grained low-bit representation.
+
+For a token vector $\mathbf{x}_t \in \mathbb{R}^d$ (either key or value), the feature dimension is partitioned into $M=d/g$ contiguous tiles of size $g$:
+\begin{equation}
+\mathbf{x}_t = [\mathbf{x}_{t,1},\mathbf{x}_{t,2},\ldots,\mathbf{x}_{t,M}], \qquad \mathbf{x}_{t,m} \in \mathbb{R}^{g}.
+\end{equation}
+Each tile is quantized independently with its own scale $s_{t,m}$ and zero point $z_{t,m}$:
+\begin{equation}
+\mathbf{q}_{t,m}
+=
+\operatorname{clip}\!\left(
+\operatorname{round}\!\left(
+\frac{\mathbf{x}_{t,m}-z_{t,m}}{s_{t,m}}
+\right),
+0,\,
+2^b-1
+\right),
+\end{equation}
+where $b$ is the quantization bitwidth.
+
+Since key states may contain outliers that destabilize aggressive low-bit quantization, \method\ applies Hadamard rotation to queries and keys before quantization. Let $\mathbf{H} \in \mathbb{R}^{d \times d}$ denote the normalized Hadamard matrix. We rotate
+
+\begin{equation}
+\tilde{\mathbf{q}}_i = \frac{1}{\sqrt{d}}\mathbf{H}\mathbf{q}_i,
+\qquad
+\tilde{\mathbf{k}}_j = \frac{1}{\sqrt{d}}\mathbf{H}\mathbf{k}_j.
+\end{equation}
+Because the Hadamard matrix is orthogonal, the attention score is preserved:
+\begin{equation}
+\tilde{\mathbf{q}}_i^\top \tilde{\mathbf{k}}_j
+=
+\mathbf{q}_i^\top \mathbf{k}_j.
+\end{equation}
+
+Figure~\ref{fig:hadamard} and Table~\ref{tab:hadamard_sparse_quant} show that Hadamard rotation suppresses heavy tails and generally improves robustness under low-bit quantization, especially at lower bitwidths.
+
+% The rotation therefore improves the distribution seen by the quantizer without changing the attention computation itself.
+
+% Figure~\ref{fig:hadamard} illustrates the effect of the Hadamard rotation on key states. After rotation, the heavy tail is noticeably suppressed, which reduces the dominance of outliers in low-bit quantization. At the same time, the rotated distribution does not collapse into a fully uniform one, and still preserves sufficient magnitude variation for subsequent magnitude-based feature sparsification.
+
+% Table~\ref{tab:hadamard_sparse_quant} further supports this observation quantitatively on WikiText-2. Under quantization-only settings, Hadamard rotation improves PPL at 4-bit, 3-bit, and especially 2-bit, supporting its role in stabilizing low-bit quantization. When 50\% KV sparsity is further applied, the same trend remains visible at 3-bit and 2-bit, where Rotate still outperforms RTN by a meaningful margin. At 4-bit with added sparsity, however, the gain becomes marginal and slightly reverses, suggesting that when quantization error is already relatively small, the rotation-induced mixing may mildly weaken the magnitude separability used by subsequent sparsification. Overall, Per-Token-Tile quantization provides a fine-grained low-bit representation, while Hadamard rotation appears to improve robustness to key outliers without largely disrupting subsequent sparsification.
+
 
 \subsection{Sparse-Quant Format and Decode Kernel}
 \label{sec:sparse-quant}
-
-Compression quality alone is not enough if the resulting representation cannot be executed efficiently at decode time. We therefore co-design a sparse-quant format and its matching decode kernel, so that the compressed KV cache not only reduces storage cost, but also translates into practical decode acceleration.
-
-Figure~\ref{fig:sq-kernel-overview} gives an overview of this design. The left panel shows the sparse-quant format. Each $1 \times 64$ tile stores a bitmap for nonzero positions, packed low-bit values, a per-tile offset, and quantization metadata such as scales and zero points. This layout is designed to support high sparsity and low-bit storage while preserving a regular memory organization, thereby avoiding the irregular accesses and indexing overheads of conventional sparse formats.
-
-The right panel shows the matching decode kernel. During decode, the kernel follows a \emph{load-as-compressed, compute-as-dense} strategy. It first loads bitmaps and packed low-bit values from memory, then reconstructs the nonzeros through unpacking and dequantization, and scatters them into dense shared-memory tiles. Tensor Core matrix-vector computation is then performed on these reconstructed dense tiles. In this way, sparsity is handled only along the data-loading path, while the actual compute stage still uses regular dense operators.
-
-This design is particularly important for decode-stage attention, which is strongly memory-bound. By keeping the KV cache compressed in memory, the format reduces memory traffic; by reconstructing dense tiles only along the compute path, the kernel avoids the control-flow divergence and irregular accesses that often limit sparse execution. As a result, the sparse-quant format and decode kernel together convert compressed KV representations into practical decode-time gains, rather than merely reducing storage footprint.
-
 \begin{figure}[t]
 \centering
 \begin{minipage}[t]{0.47\textwidth}
@@ -352,39 +375,46 @@ This design is particularly important for decode-stage attention, which is stron
 
 \small (b) Sparse-quant decode kernel
 \end{minipage}
-\caption{Overview of the sparse-quant format and decode kernel. The left panel shows the bitmap-based sparse-quant format. The right panel shows the decode kernel that loads compressed tiles, performs unpacking and dequantization, reconstructs dense shared-memory tiles, and invokes Tensor Core matrix-vector computation.}
+\caption{Sparse-quant format and decode kernel. The format stores bitmap metadata and packed low-bit values, while the kernel follows a load-as-compressed, compute-as-dense execution path.}
 \label{fig:sq-kernel-overview}
 \end{figure}
 
-\FloatBarrier
+Compression quality alone is not enough if the resulting representation cannot be executed efficiently at decode time. We therefore co-design a sparse-quant format and its matching decode kernel so that the compressed KV cache reduces not only storage cost but also decode-time memory traffic.
+
+Figure~\ref{fig:sq-kernel-overview} summarizes this design. Each $1 \times 64$ tile stores a bitmap for nonzero positions, packed low-bit values, a per-tile offset, and quantization metadata such as scales and zero points. During decode, the kernel follows a \emph{load-as-compressed, compute-as-dense} strategy: it loads compressed tiles from memory, reconstructs dense shared-memory tiles through unpacking and dequantization, and then invokes Tensor Core matrix-vector computation. In this way, sparsity is handled along the loading path while the compute stage remains dense and regular.
+
+This design is especially useful for decode-stage attention, which is strongly memory-bound: keeping the KV cache compressed in memory reduces memory traffic, while reconstructing dense tiles only on the compute path avoids the irregular accesses and control-flow divergence that often limit sparse execution.
+
+% Figure~\ref{fig:sq-kernel-overview} gives an overview of this design. The left panel shows the sparse-quant format. Each $1 \times 64$ tile stores a bitmap for nonzero positions, packed low-bit values, a per-tile offset, and quantization metadata such as scales and zero points. This layout is designed to support high sparsity and low-bit storage while preserving a regular memory organization, thereby avoiding the irregular accesses and indexing overheads of conventional sparse formats.
+
+% The right panel shows the matching decode kernel. During decode, the kernel follows a \emph{load-as-compressed, compute-as-dense} strategy. It first loads bitmaps and packed low-bit values from memory, then reconstructs the nonzeros through unpacking and dequantization, and scatters them into dense shared-memory tiles. Tensor Core matrix-vector computation is then performed on these reconstructed dense tiles. In this way, sparsity is handled only along the data-loading path, while the actual compute stage still uses regular dense operators.
+
+% This design is particularly important for decode-stage attention, which is strongly memory-bound. By keeping the KV cache compressed in memory, the format reduces memory traffic; by reconstructing dense tiles only along the compute path, the kernel avoids the control-flow divergence and irregular accesses that often limit sparse execution. As a result, the sparse-quant format and decode kernel together convert compressed KV representations into practical decode-time gains, rather than merely reducing storage footprint.
+
 
 \section{Experiments}
 \label{sec:experiments}
 
 \subsection{Experimental Setup}
+We evaluate \method\ on accuracy and efficiency. Our implementation uses Python 3.10, PyTorch 2.6.0, CUDA 12.4, and custom CUDA/Triton kernels, and all experiments are conducted on one NVIDIA A100 80GB PCIe GPU with an Intel Xeon CPU and 252GB host memory.
 
-We evaluate \method\ on both accuracy and efficiency. Our implementation is built on Python 3.10, PyTorch 2.6.0, CUDA 12.4, and FlashAttention~\cite{dao2022flashattention}, and uses custom CUDA/Triton kernels for sparse-quant packing and the sparse-quant decode kernel. All experiments are conducted on a single NVIDIA A100 80GB PCIe GPU with an Intel Xeon CPU and 252GB host memory.
+For accuracy, we use the official LongBench~\cite{longbench} pipeline and focus on six representative tasks: NarrativeQA, Qasper, \multifieldqa, HotpotQA, TREC, and LCC. We use Llama-3-8B-Instruct~\cite{grattafiori2024llama3} as the main model and additionally report Llama-2-7B~\cite{touvron2023llama2}, Mistral-7B-v0.1~\cite{jiang2023mistral7b}, and Qwen2.5-7B-Instruct~\cite{yang2024qwen25}. Inputs are truncated to 8192 tokens by keeping the first and last 4096 tokens when necessary. We compare against dense decoding, a matched-budget uniform sparsity baseline based on MUSTAFAR~\cite{joo2025mustafar}, and a sequential MUSTAFAR+KIVI baseline~\cite{liu2024kivi} (denoted as \textbf{M+K}); sparse-only settings use 50\% and 70\% average sparsity, and joint sparse-quant settings use 50/50 and 70/70 K/V sparsity with 4-bit and 2-bit quantization.
 
-For accuracy evaluation, we use LongBench~\cite{longbench} with the official pipeline. Our main sparse-only and joint sparse-quant comparisons focus on six focal tasks from this benchmark. These tasks are NarrativeQA, Qasper, \multifieldqa, HotpotQA, TREC, and LCC. They cover diverse long-context behaviors while enabling stable matched-budget comparisons across compression settings and model families. We use Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} as the main model and further evaluate on Llama-2-7B~\cite{touvron2023llama2}, Mistral-7B-v0.1~\cite{jiang2023mistral7b}, and Qwen2.5-7B-Instruct~\cite{yang2024qwen25}. Inputs are truncated to 8192 tokens by keeping the first 4096 and the last 4096 tokens when necessary. We compare against dense decoding, a uniform sparsity baseline using the MUSTAFAR sparsity setting~\cite{joo2025mustafar}, and a sequential sparse-then-quantize baseline that combines that sparsity setting with KIVI quantization~\cite{liu2024kivi}, denoted as \textbf{M+K}. We report 50\% and 70\% average sparsity for sparse-only comparisons, and 50/50 and 70/70 K/V sparsity with 4-bit and 2-bit quantization for joint sparse-quant comparisons. Differential policies are selected by a lightweight held-out calibration procedure; detailed reporting rules and finalized configurations are provided in Appendix~\ref{app:diffsparse-extra}.
+% For accuracy evaluation, we use LongBench~\cite{longbench} with the official pipeline. Our main sparse-only and joint sparse-quant comparisons focus on six focal tasks from this benchmark. These tasks are NarrativeQA, Qasper, \multifieldqa, HotpotQA, TREC, and LCC. They cover diverse long-context behaviors while enabling stable matched-budget comparisons across compression settings and model families. We use Llama-3-8B-Instruct~\cite{grattafiori2024llama3} as the main model and further evaluate on Llama-2-7B~\cite{touvron2023llama2}, Mistral-7B-v0.1~\cite{jiang2023mistral7b}, and Qwen2.5-7B-Instruct~\cite{yang2024qwen25}. Inputs are truncated to 8192 tokens by keeping the first 4096 and the last 4096 tokens when necessary. We compare against dense decoding, a uniform sparsity baseline using the MUSTAFAR sparsity setting~\cite{joo2025mustafar}, and a sequential sparse-then-quantize baseline that combines that sparsity setting with KIVI quantization~\cite{liu2024kivi}, denoted as \textbf{M+K}. We report 50\% and 70\% average sparsity for sparse-only comparisons, and 50/50 and 70/70 K/V sparsity with 4-bit and 2-bit quantization for joint sparse-quant comparisons. Differential policies are selected by a lightweight held-out calibration procedure; detailed reporting rules and finalized configurations are provided in Appendix~\ref{app:diffsparse-extra}.
 
-For efficiency evaluation, we use Meta-Llama-3-8B-Instruct with 4096 input tokens, 256 generated tokens, and batch sizes from 1 to 8. We report end-to-end decoding throughput, compression overhead, compressed KV-cache size, and compression ratio. Runtime comparisons focus on executable baselines, namely dense decoding, the MUSTAFAR~\cite{joo2025mustafar} sparse kernel, and the proposed sparse-quant runtime path.
+For efficiency, we use Llama-3-8B-Instruct with 4096 input tokens, 256 generated tokens, and batch sizes from 1 to 8. We report end-to-end throughput, compression overhead, compressed KV-cache size, and compression ratio, and compare dense decoding, the MUSTAFAR~\cite{joo2025mustafar} sparse kernel, and the proposed sparse-quant runtime path.
 
 \subsection{Accuracy Results}
 
 \subsubsection{Differential Sparsity Alone}
 \label{sec:diff-sparsity-alone}
-\suppressfloats[t]
+We first study differential sparsity without quantization or Hadamard rotation to isolate the effect of budget allocation, comparing \method\ against dense decoding and a matched-budget uniform sparsity baseline (the sparse token policy used in MUSTAFAR) at 50\% and 70\% average sparsity.For each task and target budget, we select the differential policy on a small calibration split and re-check it on a disjoint validation split before full evaluation. Table~\ref{tab:diff-sparsity-meta-main} shows that the finalized differential results remain non-negative, with larger gains at 70\% sparsity than at 50\%. This suggests that differential budget allocation becomes increasingly valuable under tighter sparsity budgets.
 
-We first study differential sparsity without quantization or Hadamard rotation, in order to isolate the effect of budget allocation. We compare \method\ against a matched-budget \emph{uniform} sparsity baseline, where all tokens are compressed with the same sparsity rule regardless of importance. This is also the sparse token policy used in MUSTAFAR~\cite{joo2025mustafar}. We report results at 50\% and 70\% average sparsity, with dense decoding as an uncompressed reference.
-
-For each task and target budget, we select the differential policy on a small calibration split and re-check it on a disjoint validation split before full evaluation. For robustness, we use a conservative reporting protocol, and the finalized reported results are summarized in the main text; detailed task-level outcomes and reporting decisions are provided in Appendix~\ref{app:diffsparse-extra}.
-
-Table~\ref{tab:diff-sparsity-meta-main} reports sparse-only results on six representative LongBench tasks for Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. The main comparison is between matched-budget uniform and differential sparsity. Under the conservative reporting protocol, the finalized differential results remain non-negative, and the gain is more pronounced at 70\% sparsity than at 50\%. This shows that differential budget allocation becomes increasingly valuable under tighter sparsity budgets.
-
-\begin{table}[t]
+\begin{table}[tbp]
 \label{tab:diff-sparsity-meta-main}
 \centering
-\caption{Sparse-only differential sparsity versus matched-budget uniform sparsity on Meta-Llama-3-8B-Instruct over six representative LongBench tasks. Dense decoding is reported as an uncompressed reference. ``Uniform'' corresponds to the token-agnostic policy used in MUSTAFAR. In a few cases, the reported differential result reverts to the uniform baseline.}
+\caption{Sparse-only results on six representative LongBench tasks for Llama-3-8B-Instruct.}
+% \caption{Sparse-only differential sparsity versus matched-budget uniform sparsity on Llama-3-8B-Instruct over six representative LongBench tasks. Dense decoding is reported as an uncompressed reference. ``Uniform'' corresponds to the token-agnostic policy used in MUSTAFAR. In a few cases, the reported differential result reverts to the uniform baseline.}
 \setlength{\tabcolsep}{4pt}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{lccccccc}
@@ -402,38 +432,56 @@ Differential-70 & 23.94 & \textbf{41.03} & \textbf{41.61} & \textbf{45.12} & \te
 \end{tabular}}
 \end{table}
 
-The same pattern holds across architectures. Table~\ref{tab:diff-sparsity-cross-model-main} summarizes sparse-only averages on three representative models. In all three cases, differential sparsity remains non-negative in the finalized results, and the improvement is consistently larger at 70\% sparsity than at 50\%. Detailed task-level results for the additional models, together with the corresponding finalized differential-sparsity configurations, are provided in Appendix~\ref{app:diffsparse-extra}.
 
-\begin{table}[t]
+
+% \begin{table}[t]
+% \centering
+% \caption{Cross-model average sparse-only results on six representative LongBench tasks.}
+% \caption{Cross-model average sparse-only results on six representative LongBench tasks under matched sparsity budgets.}
+% \caption{Cross-model average sparse-only results on the six representative LongBench tasks. ``Differential'' denotes the finalized full-task average under the same reporting protocol as the main-text sparse-only study.}
+% \label{tab:diff-sparsity-cross-model-main}
+% \setlength{\tabcolsep}{5pt}
+% \resizebox{0.82\textwidth}{!}{
+% \begin{tabular}{lcccc}
+% \toprule
+% Model & Budget & Uniform Avg. & Differential Avg. & $\Delta$ \\
+% \midrule
+% Llama-2-7B & 50\% & 30.88 & \textbf{31.54} & +0.66 \\
+% Llama-2-7B & 70\% & 29.29 & \textbf{30.78} & +1.49 \\
+% Qwen2.5-7B-Instruct & 50\% & 31.56 & \textbf{31.68} & +0.11 \\
+% Qwen2.5-7B-Instruct & 70\% & 30.67 & \textbf{31.24} & +0.57 \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+\begin{table}[tbp]
 \centering
-\caption{Cross-model average sparse-only results on the six representative LongBench tasks. ``Differential'' denotes the finalized full-task average under the same reporting protocol as the main-text sparse-only study.}
+\caption{Cross-model sparse-only averages on six representative LongBench tasks.}
 \label{tab:diff-sparsity-cross-model-main}
 \setlength{\tabcolsep}{5pt}
-\resizebox{0.82\textwidth}{!}{
+\resizebox{0.78\textwidth}{!}{
 \begin{tabular}{lcccc}
 \toprule
-Model & Budget & Uniform Avg. & Differential Avg. & $\Delta$ \\
+Model & Budget & Uniform & Differential & $\Delta$ \\
 \midrule
-Meta-Llama-3-8B-Instruct & 50\% & 47.59 & \textbf{47.85} & +0.26 \\
-Meta-Llama-3-8B-Instruct & 70\% & 45.80 & \textbf{46.61} & +0.81 \\
-Llama-2-7B & 50\% & 30.88 & \textbf{31.54} & +0.66 \\
-Llama-2-7B & 70\% & 29.29 & \textbf{30.78} & +1.49 \\
-Qwen2.5-7B-Instruct & 50\% & 31.56 & \textbf{31.68} & +0.11 \\
-Qwen2.5-7B-Instruct & 70\% & 30.67 & \textbf{31.24} & +0.57 \\
+\multirow{2}{*}{Llama-2-7B}
+& 50\% & 30.88 & \textbf{31.54} & +0.66 \\
+& 70\% & 29.29 & \textbf{30.78} & +1.49 \\
+\midrule
+\multirow{2}{*}{Qwen2.5-7B-Instruct}
+& 50\% & 31.56 & \textbf{31.68} & +0.11 \\
+& 70\% & 30.67 & \textbf{31.24} & +0.57 \\
 \bottomrule
 \end{tabular}}
 \end{table}
 
-Overall, these sparse-only results show that differential sparsity is already beneficial before introducing quantization, and that its advantage grows with sparsity. This motivates the full \method\ design: if token selection already matters in the sparse-only regime, it should matter even more once low-bit representation and execution-path constraints are introduced.
-
-\FloatBarrier
+The same trend holds across models: differential sparsity stays non-negative and yields larger gains at 70\% sparsity than at 50\% (Table~\ref{tab:diff-sparsity-cross-model-main}). Together, Tables~\ref{tab:diff-sparsity-meta-main} and~\ref{tab:diff-sparsity-cross-model-main} show that token-level budget allocation is already beneficial in the sparse-only regime and becomes more important under tighter budgets.
 
 \subsubsection{Joint sparsity-quantization results.}
-We evaluate the full joint sparse-quant framework on six representative LongBench tasks: NarrativeQA, Qasper, \multifieldqa, HotpotQA, TREC, and LCC. Table~\ref{tab:main-accuracy} reports detailed results on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. On this model, \method\ yields higher average scores than the sequential M+K baseline in all four tested settings. The gain is modest under milder compression, but becomes larger under more aggressive sparse-quant settings, especially at 70/70 + 2-bit. Under this most aggressive setting, the average score improves from 39.83 to 43.12, with notable gains on Qasper, TREC, and LCC. This trend is consistent with the motivation of \method: as the compression ratio increases, the benefit of jointly aligning sparsity, quantization, and runtime execution also increases.
 
-\begin{table}[t]
+\begin{table}[tbp]
 \centering
-\caption{Detailed results on six representative LongBench tasks for Meta-Llama-3-8B-Instruct. ``50/50'' and ``70/70'' denote target sparsity ratios for K and V caches.}
+\caption{Joint sparse-quant results on six representative LongBench tasks for Llama-3-8B-Instruct.}
 \label{tab:main-accuracy}
 \setlength{\tabcolsep}{4pt}
 \resizebox{\textwidth}{!}{
@@ -453,14 +501,15 @@ M+K, 70/70 + 2-bit & \textbf{21.34} & 35.43 & 43.43 & 39.21 & 63.00 & 36.59 & 39
 \end{tabular}}
 \end{table}
 
-To test whether the trend is specific to one architecture, Table~\ref{tab:cross-model} summarizes the average score on the same six representative LongBench tasks for three additional model families. The results indicate a generally favorable but not perfectly uniform trend for \method\ over M+K across models and compression settings. The gains are most visible on Meta-Llama-3-8B-Instruct and Mistral-7B-v0.1, and remain visible in most settings on Llama-2-7B and Qwen2.5-7B-Instruct, especially under tighter budgets. At the same time, a few settings remain negative or nearly neutral, such as Llama-2-7B at 50/50 + 2-bit and Qwen2.5-7B-Instruct at 50/50 + 2-bit. Overall, these results suggest that the benefit of \method\ is mainly associated with the joint design itself, while its magnitude still depends on model family and compression budget. To isolate the quantization contribution from the sparse policy, Appendix~\ref{app:quant-only} further reports a quantization-only comparison between the \method\ quantizer and a matched KIVI baseline.
+Table~\ref{tab:main-accuracy} reports joint sparse-quant results on six representative LongBench tasks for Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. Across all four settings, \method\ achieves higher average scores than the sequential M+K baseline, with the largest gain at 70/70 + 2-bit, where the average score improves from 39.83 to 43.12. This supports jointly aligning sparsity, quantization, and runtime execution under tighter compression budgets.
 
-\begin{table}[t]
+\begin{table}[tbp]
 \centering
-\caption{Cross-model averages on six representative LongBench tasks. ``M+K'' denotes the sequential MUSTAFAR+KIVI baseline.}
+\caption{Cross-model averages on six tasks.}
 \label{tab:cross-model}
-\footnotesize
-\setlength{\tabcolsep}{3pt}
+\scriptsize
+\renewcommand{\arraystretch}{0.94}
+\setlength{\tabcolsep}{2.5pt}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{lcccccccc}
 \toprule
@@ -474,7 +523,6 @@ To test whether the trend is specific to one architecture, Table~\ref{tab:cross-
 \cmidrule(lr){8-9}
 Model & M+K & \method & M+K & \method & M+K & \method & M+K & \method \\
 \midrule
-Meta-Llama-3-8B-Instruct & 45.90 & \textbf{45.93} & 43.38 & \textbf{44.02} & 44.18 & \textbf{45.34} & 39.83 & \textbf{43.12} \\
 Llama-2-7B & 31.34 & \textbf{31.37} & \textbf{31.51} & 30.23 & 30.57 & \textbf{30.97} & 29.92 & \textbf{30.09} \\
 Mistral-7B-v0.1 & 32.84 & \textbf{32.90} & 31.70 & \textbf{32.37} & 32.43 & \textbf{32.71} & 30.14 & \textbf{32.35} \\
 Qwen2.5-7B-Instruct & 31.17 & \textbf{37.08} & \textbf{26.10} & 23.48 & 33.00 & \textbf{39.67} & 25.51 & \textbf{35.20} \\
@@ -483,77 +531,74 @@ Qwen2.5-7B-Instruct & 31.17 & \textbf{37.08} & \textbf{26.10} & 23.48 & 33.00 & 
 }
 \end{table}
 
-\FloatBarrier
+Table~\ref{tab:cross-model} shows a generally favorable but non-uniform cross-model trend over M+K: gains are more consistent under tighter compression budgets, while a few milder settings remain neutral or slightly negative. This suggests that the benefit of \method\ mainly comes from the joint design itself, although its magnitude still depends on model family and compression setting.
 
 \subsection{Efficiency Results}
 
-Before presenting runtime results, we clarify the efficiency comparison protocol. In the accuracy experiments, we include \textbf{M+K}, which combines the MUSTAFAR sparsity setting~\cite{joo2025mustafar} with KIVI quantization~\cite{liu2024kivi}, as a sequential sparse-plus-quantization baseline to evaluate compression quality under matched budgets. However, this sequential composition is an algorithmic baseline rather than a jointly executable runtime path: while MUSTAFAR provides a sparse decode kernel, a naive combination with KIVI does not by itself define a unified sparse-quant execution kernel for end-to-end decoding. In contrast, a central contribution of \method\ is the algorithm--system co-design of compression policy, low-bit representation, storage format, and decode kernel, which allows sparsity and quantization to be executed together and translated into practical system-level gains. Therefore, in the efficiency experiments, we compare \method\ primarily against dense decoding and the MUSTAFAR sparse kernel~\cite{joo2025mustafar}, which provides the closest executable baseline.
-
+In the accuracy experiments, \textbf{M+K} serves as a matched-budget algorithmic baseline, but it does not provide a unified runtime path for end-to-end decoding. Since a central contribution of \method\ is to make joint sparse-quant execution practical through co-design of policy, representation, format, and kernel, the efficiency experiments compare \method\ against dense decoding and the executable MUSTAFAR sparse kernel~\cite{joo2025mustafar}.
 \subsubsection{End-to-end throughput.}
 
-\begin{table}[!t]
-\centering
-\caption{End-to-end decoding throughput (tokens/s) on Meta-Llama-3-8B-Instruct with 4096 input tokens and 256 output tokens.}
-\label{tab:throughput-table}
-\setlength{\tabcolsep}{4pt}
-\resizebox{\textwidth}{!}{
-\begin{tabular}{cccccc}
-\toprule
-Batch Size & Dense & MUSTAFAR-50 & MUSTAFAR-70 & \method\ 50/50 + 2-bit & \method\ 70/70 + 2-bit \\
-\midrule
-1 & 28.55 & 17.16 & 16.84 & 23.24 & 23.38 \\
-2 & 39.81 & 31.75 & 30.56 & 42.76 & 42.37 \\
-3 & 49.15 & 45.15 & 46.18 & 55.45 & 57.81 \\
-4 & 55.83 & 53.80 & 57.63 & 64.70 & 66.42 \\
-5 & 56.67 & 66.93 & 65.96 & 72.02 & 74.22 \\
-6 & 56.81 & 77.17 & 78.01 & 76.80 & 80.38 \\
-7 & 59.69 & 86.52 & 83.53 & 80.47 & 84.06 \\
-8 & 62.80 & 94.51 & 96.43 & 86.98 & 87.12 \\
-\bottomrule
-\end{tabular}}
-\end{table}
+% \begin{table}[!t]
+% \centering
+% \caption{End-to-end decoding throughput (tokens/s) on Llama-3-8B-Instruct with 4096 input tokens and 256 output tokens.}
+% \label{tab:throughput-table}
+% \setlength{\tabcolsep}{4pt}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{cccccc}
+% \toprule
+% Batch Size & Dense & MUSTAFAR-50 & MUSTAFAR-70 & \method\ 50/50 + 2-bit & \method\ 70/70 + 2-bit \\
+% \midrule
+% 1 & 28.55 & 17.16 & 16.84 & 23.24 & 23.38 \\
+% 2 & 39.81 & 31.75 & 30.56 & 42.76 & 42.37 \\
+% 3 & 49.15 & 45.15 & 46.18 & 55.45 & 57.81 \\
+% 4 & 55.83 & 53.80 & 57.63 & 64.70 & 66.42 \\
+% 5 & 56.67 & 66.93 & 65.96 & 72.02 & 74.22 \\
+% 6 & 56.81 & 77.17 & 78.01 & 76.80 & 80.38 \\
+% 7 & 59.69 & 86.52 & 83.53 & 80.47 & 84.06 \\
+% 8 & 62.80 & 94.51 & 96.43 & 86.98 & 87.12 \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
 
-\begin{figure}[!t]
+\begin{wrapfigure}{r}{0.48\textwidth}
+\vspace{-10pt}
 \centering
-\includegraphics[width=0.68\textwidth]{figures/throughput_llama3_bs.pdf}
-\caption{End-to-end decoding throughput on Meta-Llama-3-8B-Instruct with 4096 input tokens and 256 output tokens. The full sparse-quant path provides its most visible advantage in the small-to-medium batch regime.}
+\includegraphics[width=0.46\textwidth]{figures/throughput_llama3_bs.pdf}
+\caption{End-to-end decoding throughput on Llama-3-8B. The clearest gain appears in the small-to-medium batch regime.}
 \label{fig:throughput}
-\end{figure}
+\vspace{-6pt}
+\end{wrapfigure}
 
-Table~\ref{tab:throughput-table} and Fig.~\ref{fig:throughput} report end-to-end decoding throughput on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. Dense decoding is strongest at batch size 1, where the compression overhead is not yet amortized. As batch size increases, the compressed paths become increasingly favorable, indicating that the workload becomes more bandwidth-sensitive. The most visible advantage of the full sparse-quant design appears in the small-to-medium batch regime. For example, under the 70/70 + 2-bit setting, \method\ reaches 80.38 tokens/s at batch size 6, which is 41.5\% higher than dense decoding and 3.0\% higher than MUSTAFAR-70. At larger batch sizes, however, the throughput gap narrows and sparsity-only configurations can become preferable, suggesting that the extra unpacking and dequantization overhead is less effectively amortized once the workload becomes more compute-heavy. Overall, these results suggest that joint sparse-quant compression can translate into practical decoding speedups when KV-cache traffic remains the dominant bottleneck.
+Figure~\ref{fig:throughput} reports end-to-end decoding throughput on Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. Dense decoding is strongest at batch size 1, where compression overhead is not yet amortized. As batch size increases, the compressed paths become more favorable, with the clearest sparse-quant advantage in the small-to-medium batch regime. Under 70/70 + 2-bit, \method\ reaches 80.38 tokens/s at batch size 6, improving over dense decoding by 41.5\% and over MUSTAFAR-70 by 3.0\%. At larger batch sizes, the gap narrows, suggesting that unpacking and dequantization overheads are less effectively amortized once the workload becomes more compute-heavy.
 
-\FloatBarrier
+% Table~\ref{tab:throughput-table} and Fig.~\ref{fig:throughput} report end-to-end decoding throughput on Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. Dense decoding is strongest at batch size 1, where the compression overhead is not yet amortized. As batch size increases, the compressed paths become increasingly favorable, indicating that the workload becomes more bandwidth-sensitive. The most visible advantage of the full sparse-quant design appears in the small-to-medium batch regime. For example, under the 70/70 + 2-bit setting, \method\ reaches 80.38 tokens/s at batch size 6, which is 41.5\% higher than dense decoding and 3.0\% higher than MUSTAFAR-70. At larger batch sizes, however, the throughput gap narrows and sparsity-only configurations can become preferable, suggesting that the extra unpacking and dequantization overhead is less effectively amortized once the workload becomes more compute-heavy. Overall, these results suggest that joint sparse-quant compression can translate into practical decoding speedups when KV-cache traffic remains the dominant bottleneck.
 
 \subsubsection{Compression overhead.}
 
-Compression is beneficial only when its own runtime cost remains controlled. Table~\ref{tab:compression-summary} reports representative compression statistics on Meta-Llama-3-8B-Instruct. The results show that the sparse-quant path achieves substantially higher compression ratios than sparsity-only baselines while keeping compression time competitive. For example, at batch size 8, MUSTAFAR-70 reduces the KV cache to 1964.29MB, whereas \method\ under the 70/70 + 2-bit setting further reduces it to 1176.25MB, improving the compression ratio from 2.09$\times$ to 3.48$\times$, while also lowering compression time from 5411.29ms to 4293.18ms. This suggests that the benefit of \method\ is not limited to reduced decode-time bandwidth demand; the more compact sparse-quant representation also reduces compression-side write-back cost.
+% Compression is beneficial only when its own runtime cost remains controlled. Table~\ref{tab:compression-summary} reports representative compression statistics on Llama-3-8B-Instruct. The results show that the sparse-quant path achieves substantially higher compression ratios than sparsity-only baselines while keeping compression time competitive. For example, at batch size 8, MUSTAFAR-70 reduces the KV cache to 1964.29MB, whereas \method\ under the 70/70 + 2-bit setting further reduces it to 1176.25MB, improving the compression ratio from 2.09$\times$ to 3.48$\times$, while also lowering compression time from 5411.29ms to 4293.18ms. This suggests that the benefit of \method\ is not limited to reduced decode-time bandwidth demand; the more compact sparse-quant representation also reduces compression-side write-back cost.
 
-\begin{table}[t]
+\begin{table}[tbp]
 \centering
-\caption{Representative compression overhead and KV-cache size for Meta-Llama-3-8B-Instruct (input length 4096). Compression ratio is original KV size divided by compressed KV size.}
+\scriptsize
+\renewcommand{\arraystretch}{0.94}
+\caption{Compression statistics at input length 4096.}
 \label{tab:compression-summary}
-\setlength{\tabcolsep}{5pt}
-\resizebox{\textwidth}{!}{
-\begin{tabular}{ccccc}
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular*}{0.96\textwidth}{@{\extracolsep{\fill}}lcccccc@{}}
 \toprule
-Batch Size & Method & KV-Cache Size (MB) & Compression Ratio & Compression Time (ms) \\
+& \multicolumn{3}{c}{BS = 1} & \multicolumn{3}{c}{BS = 8} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+Method & KV (MB) & Ratio & Time (ms) & KV (MB) & Ratio & Time (ms) \\
 \midrule
-\multirow{4}{*}{1}
-& Sparse50 & 2720.16 & 1.51$\times$ & 740.80 \\
-& Sparse70 & 1964.29 & 2.09$\times$ & 716.30 \\
-& Sparse50+2bit & 1261.16 & 3.25$\times$ & 545.18 \\
-& Sparse70+2bit & 1176.25 & 3.48$\times$ & 552.86 \\
-\midrule
-\multirow{4}{*}{8}
-& Sparse50 & 2720.16 & 1.51$\times$ & 5688.23 \\
-& Sparse70 & 1964.29 & 2.09$\times$ & 5411.29 \\
-& Sparse50+2bit & 1261.16 & 3.25$\times$ & 4317.88 \\
-& Sparse70+2bit & 1176.25 & 3.48$\times$ & 4293.18 \\
+Sparse-50 & 2720.2 & 1.51$\times$ & 740.8 & 2720.2 & 1.51$\times$ & 5688.2 \\
+Sparse-70 & 1964.3 & 2.09$\times$ & 716.3 & 1964.3 & 2.09$\times$ & 5411.3 \\
+Sparse-50 + 2b & 1261.2 & 3.25$\times$ & 545.2 & 1261.2 & 3.25$\times$ & 4317.9 \\
+Sparse-70 + 2b & 1176.3 & 3.48$\times$ & 552.9 & 1176.3 & 3.48$\times$ & 4293.2 \\
 \bottomrule
-\end{tabular}}
+\end{tabular*}
 \end{table}
 
-\FloatBarrier
+Table~\ref{tab:compression-summary} reports representative compression statistics on Llama-3-8B-Instruct. Compared with sparsity-only baselines, the sparse-quant path achieves higher compression ratios while keeping compression time competitive. At batch size 8, \method\ under 70/70 + 2-bit reduces the KV cache from 1964.3MB to 1176.3MB relative to MUSTAFAR-70, improving the compression ratio from 2.09$\times$ to 3.48$\times$ and reducing compression time from 5411.3ms to 4293.2ms. This suggests that the more compact sparse-quant representation also lowers compression-side write-back cost.
 
 \section{Discussion and Future Work}
 \label{sec:discussion}
@@ -592,9 +637,8 @@ We test this assumption using the same threshold definition as \method. We
 compute normalized attention-derived importance scores from the observed
 attention statistics and derive the corresponding thresholds
 $(\tau_{\text{high}}, \tau_{\text{low}})$. The evaluation uses
-Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} on seven datasets.
-Specifically, we use WikiText-2~\cite{merity2016pointer},
-GSM8K~\cite{cobbe2021gsm8k}, MuSiQue~\cite{trivedi2022musique}, and four
+Llama-3-8B-Instruct~\cite{grattafiori2024llama3} on seven datasets.
+Specifically, we use WikiText-2, GSM8K, MuSiQue, and four
 LongBench tasks: Qasper, \multifieldqa, NarrativeQA, and
 HotpotQA~\cite{longbench}.
 Each dataset contributes 10 samples, with maximum length 192 and representative
@@ -663,13 +707,13 @@ To isolate the contribution of the numerical representation in \method, we furth
 
 Unless otherwise noted, both methods use a residual window of 128 tokens. The KIVI baseline uses channel-wise key quantization, per-token-head value quantization, and group size 128, whereas the \method\ quantizer uses per-token-tile quantization with tile-wise Hadamard rotation (tile size 64 and Hadamard group size 64).
 
-Table~\ref{tab:appendix-quant-llama3} reports detailed results on Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3} under the full 16-task LongBench protocol. At 4-bit and 3-bit, the two methods remain close in average score. At 2-bit, however, the \method\ quantizer is noticeably stronger, improving the full-benchmark average from 26.94 to 30.59, with especially visible gains on HotpotQA and LCC. This pattern suggests that the tile-aligned design is most helpful in the aggressive low-bit regime.
+Table~\ref{tab:appendix-quant-llama3} reports detailed results on Llama-3-8B-Instruct~\cite{grattafiori2024llama3} under the full 16-task LongBench protocol. At 4-bit and 3-bit, the two methods remain close in average score. At 2-bit, however, the \method\ quantizer is noticeably stronger, improving the full-benchmark average from 26.94 to 30.59, with especially visible gains on HotpotQA and LCC. This pattern suggests that the tile-aligned design is most helpful in the aggressive low-bit regime.
 
-Table~\ref{tab:appendix-quant-crossmodel} summarizes the same comparison on additional model families. To stay aligned with the main-text evaluation protocol, the cross-model comparison is anchored on the same six representative LongBench tasks used in the main sparse-only and joint sparse-quant results; full LongBench results are included only where those quantization-only runs are already available. Accordingly, this table is intended to show whether the quantization trend transfers across model families under the reported evaluation scopes, rather than to support strict cross-row ranking under a single unified benchmark. The \method\ quantizer remains competitive on Llama-2-7B and again becomes favorable at 2-bit on Mistral-7B-v0.1. Overall, the cross-model results do not indicate a uniform advantage at 4-bit or 3-bit, but they suggest that the \method\ quantizer becomes more favorable as the quantization budget is pushed to 2-bit. This trend is consistent with the main observation on Meta-Llama-3-8B-Instruct and supports the view that a main benefit of the proposed quantizer lies in improved robustness under aggressive low-bit quantization.
+Table~\ref{tab:appendix-quant-crossmodel} summarizes the same comparison on additional model families. To stay aligned with the main-text evaluation protocol, the cross-model comparison is anchored on the same six representative LongBench tasks used in the main sparse-only and joint sparse-quant results; full LongBench results are included only where those quantization-only runs are already available. Accordingly, this table is intended to show whether the quantization trend transfers across model families under the reported evaluation scopes, rather than to support strict cross-row ranking under a single unified benchmark. The \method\ quantizer remains competitive on Llama-2-7B and again becomes favorable at 2-bit on Mistral-7B-v0.1. Overall, the cross-model results do not indicate a uniform advantage at 4-bit or 3-bit, but they suggest that the \method\ quantizer becomes more favorable as the quantization budget is pushed to 2-bit. This trend is consistent with the main observation on Llama-3-8B-Instruct and supports the view that a main benefit of the proposed quantizer lies in improved robustness under aggressive low-bit quantization.
 
 \begin{table}[t]
 \centering
-\caption{Quantization-only comparison on Meta-Llama-3-8B-Instruct. ``\method\ quantizer'' denotes per-token-tile quantization with tile Hadamard(64) and residual length 128. Avg. is the full 16-task LongBench average.}
+\caption{Quantization-only comparison on Llama-3-8B-Instruct. ``\method\ quantizer'' denotes per-token-tile quantization with tile Hadamard(64) and residual length 128. Avg. is the full 16-task LongBench average.}
 \label{tab:appendix-quant-llama3}
 \setlength{\tabcolsep}{4pt}
 \resizebox{\textwidth}{!}{
@@ -689,7 +733,7 @@ KIVI & 2-bit & 16.55 & 27.50 & 23.91 & \textbf{58.00} & 2.00 & 27.03 & 26.94 \\
 
 \begin{table}[t]
 \centering
-\caption{Cross-model averages for the quantization-only comparison. Meta-Llama-3-8B-Instruct and Llama-2-7B use full LongBench; Mistral-7B-v0.1 uses the same six representative LongBench tasks as in the main text. $\Delta$ is ``\method\ quantizer minus KIVI''.}
+\caption{Cross-model averages for the quantization-only comparison. Llama-3-8B-Instruct and Llama-2-7B use full LongBench; Mistral-7B-v0.1 uses the same six representative LongBench tasks as in the main text. $\Delta$ is ``\method\ quantizer minus KIVI''.}
 \label{tab:appendix-quant-crossmodel}
 \setlength{\tabcolsep}{3.5pt}
 \resizebox{\textwidth}{!}{
@@ -697,7 +741,7 @@ KIVI & 2-bit & 16.55 & 27.50 & 23.91 & \textbf{58.00} & 2.00 & 27.03 & 26.94 \\
 \toprule
 Model & Protocol & KIVI 4-bit & \method\ 4-bit & $\Delta$ & KIVI 3-bit & \method\ 3-bit & $\Delta$ & KIVI 2-bit & \method\ 2-bit & $\Delta$ \\
 \midrule
-Meta-Llama-3-8B-Instruct & full LongBench & 42.87 & 42.72 & -0.15 & 41.80 & 41.48 & -0.32 & 26.94 & \textbf{30.59} & \textbf{+3.65} \\
+Llama-3-8B-Instruct & full LongBench & 42.87 & 42.72 & -0.15 & 41.80 & 41.48 & -0.32 & 26.94 & \textbf{30.59} & \textbf{+3.65} \\
 Llama-2-7B & full LongBench & 28.09 & \textbf{28.33} & \textbf{+0.24} & \textbf{28.23} & 27.82 & -0.41 & \textbf{24.33} & 24.17 & -0.16 \\
 Mistral-7B-v0.1 & six representative LongBench tasks & \textbf{31.19} & 30.78 & -0.41 & \textbf{30.16} & 29.52 & -0.64 & 23.91 & \textbf{25.72} & \textbf{+1.81} \\
 \bottomrule
@@ -804,8 +848,8 @@ Table~\ref{tab:appendix-diffsparse-decision-summary} summarizes, for each retain
 \toprule
 Model & Budget & Differential retained & Uniform revert \\
 \midrule
-Meta-Llama-3-8B-Instruct & 50\% & 2 / 6 & 4 / 6 \\
-Meta-Llama-3-8B-Instruct & 70\% & 5 / 6 & 1 / 6 \\
+Llama-3-8B-Instruct & 50\% & 2 / 6 & 4 / 6 \\
+Llama-3-8B-Instruct & 70\% & 5 / 6 & 1 / 6 \\
 Llama-2-7B & 50\% & 4 / 6 & 2 / 6 \\
 Llama-2-7B & 70\% & 6 / 6 & 0 / 6 \\
 Qwen2.5-7B-Instruct & 50\% & 3 / 6 & 2 / 6, 1 tie \\
@@ -825,7 +869,7 @@ The tables below list the finalized retained configurations used in the sparse-o
 
 \begin{table}[t]
 \centering
-\caption{Finalized sparse-only retained configurations for Meta-Llama-3-8B-Instruct~\cite{grattafiori2024llama3}.}
+\caption{Finalized sparse-only retained configurations for Llama-3-8B-Instruct~\cite{grattafiori2024llama3}.}
 \label{tab:appendix-meta-configs}
 \scriptsize
 \resizebox{\textwidth}{!}{
@@ -954,7 +998,7 @@ Budget & Task & Final decision & $[p_0,p_1,p_2]$ & $[\rho_0,\rho_1,\rho_2]$ & No
 \section{Additional Joint Sparse-Quant Results}
 \label{app:joint-details}
 
-This appendix provides additional task-level results for the joint sparse-quant comparison summarized in Table~\ref{tab:cross-model}. Since Meta-Llama-3-8B-Instruct is already reported in detail in Table~\ref{tab:main-accuracy}, we focus here on the additional model families. For each model, we report results on the same six focal LongBench tasks used in the main text: NarrativeQA, Qasper, \multifieldqa, HotpotQA, TREC, and LCC.
+This appendix provides additional task-level results for the joint sparse-quant comparison summarized in Table~\ref{tab:cross-model}. Since Llama-3-8B-Instruct is already reported in detail in Table~\ref{tab:main-accuracy}, we focus here on the additional model families. For each model, we report results on the same six focal LongBench tasks used in the main text: NarrativeQA, Qasper, \multifieldqa, HotpotQA, TREC, and LCC.
 
 Overall, the task-level breakdowns are consistent with the trend reported in the main text. The gains of \method\ over the sequential M+K baseline are more visible under tighter compression budgets, whereas the milder 50/50 settings remain more mixed. In particular, improvements often concentrate on a subset of tasks rather than appearing uniformly across all six tasks.
 
