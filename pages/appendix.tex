@@ -1,0 +1,446 @@
+\section{Threshold Stability for Prefill-to-Decode Reuse}
+\label{sec:appendix-threshold-reuse}
+
+Section~\ref{sec:diff-sparsity} estimates the token-importance thresholds
+$(\tau_{\text{high}}, \tau_{\text{low}})$ from normalized prefill attention,
+and Section~\ref{sec:dual-window} reuses the same thresholds during decoding
+after normalizing the accumulated attention by the number of available future
+observations. This reuse strategy relies on a simple layer-wise stability
+assumption: under the same normalization rule, the importance-score scale of a
+fixed layer should remain sufficiently consistent for prefill-estimated
+thresholds to remain meaningful during online decoding.
+
+We test this assumption using the same threshold definition as \method. We
+compute normalized attention-derived importance scores from the observed
+attention statistics and derive the corresponding thresholds
+$(\tau_{\text{high}}, \tau_{\text{low}})$. The evaluation is conducted on
+Llama-3-8B-Instruct~\cite{grattafiori2024llama3} using seven datasets:
+WikiText-2~\cite{merity2016pointer}, GSM8K~\cite{cobbe2021gsm8k},
+MuSiQue~\cite{trivedi2022musique}, and four LongBench tasks: Qasper,
+\multifieldqa, NarrativeQA, and HotpotQA~\cite{longbench}. Each dataset
+contributes 10 samples, and we evaluate layers 10 and 20 as representative
+layers.
+
+Table~\ref{tab:appendix-threshold-reuse} reports the resulting cross-dataset
+statistics. For Layer 10, the median CV is 10.21\% for
+$\tau_{\text{high}}$ and 14.37\% for $\tau_{\text{low}}$; for Layer 20, the
+corresponding values are 19.40\% and 19.82\%. Figure~\ref{fig:appendix-threshold-reuse}
+shows the full distributions. Two observations matter most. First, for a fixed
+layer, both thresholds remain concentrated within a bounded range across
+datasets. Second, the threshold scale is clearly layer dependent, so the
+supported claim is reuse of \emph{fixed per-layer thresholds}, not a single
+global threshold shared by all layers.
+
+These results are sufficient for the reuse mechanism in
+Section~\ref{sec:dual-window}. The decoder does not require decode-time scores
+to match prefill thresholds exactly for every sample; it only requires the
+normalized scores to stay on a comparable layer-wise scale. Taken together,
+Table~\ref{tab:appendix-threshold-reuse} and
+Figure~\ref{fig:appendix-threshold-reuse} support estimating
+$(\tau_{\text{high}}, \tau_{\text{low}})$ once in prefill and reusing them
+during decoding without step-wise re-calibration.
+
+\begin{table}[t]
+\centering
+\caption{Cross-dataset stability of the normalized attention thresholds used by
+the prefill-to-decode reuse path. CV is computed from the per-dataset median
+thresholds.}
+\label{tab:appendix-threshold-reuse}
+\small
+\begin{tabular}{llcc}
+\toprule
+Layer & Threshold & Median range & Median CV (\%) \\
+\midrule
+10 & $\tau_{\text{high}}$ & 0.67120--0.92427 & 10.21 \\
+10 & $\tau_{\text{low}}$  & 0.04243--0.06552 & 14.37 \\
+20 & $\tau_{\text{high}}$ & 0.35568--0.61690 & 19.40 \\
+20 & $\tau_{\text{low}}$  & 0.01732--0.02890 & 19.82 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\begin{minipage}[t]{0.47\linewidth}
+\centering
+\includegraphics[width=\linewidth]{\attnscorefigdir/layer10_normalized_attention_thresholds.pdf}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.47\linewidth}
+\centering
+\includegraphics[width=\linewidth]{\attnscorefigdir/layer20_normalized_attention_thresholds.pdf}
+\end{minipage}
+\caption{Cross-dataset distributions of the normalized attention thresholds
+used by the prefill-to-decode reuse path. Left: Layer 10. Right: Layer 20. The
+thresholds remain stable at a fixed layer, while their absolute scale is
+layer dependent.}
+\label{fig:appendix-threshold-reuse}
+\end{figure}
+
+\FloatBarrier
+\section{Additional Quantization-Only Comparison}
+\label{app:quant-only}
+
+To isolate the contribution of the numerical representation in \method, we compare a quantization-only instantiation of the \method\ quantizer against a matched KIVI baseline~\cite{liu2024kivi}. This appendix keeps the same per-token-tile low-bit representation used by \method\ but removes differential sparsity and the bitmap-based sparse runtime path.
+
+Unless otherwise noted, both methods use a residual window of 128 tokens. The KIVI baseline uses channel-wise key quantization, per-token-head value quantization, and group size 128, whereas the \method\ quantizer uses per-token-tile quantization with tile-wise Hadamard rotation (tile size 64 and Hadamard group size 64).
+
+Table~\ref{tab:appendix-quant-llama3} reports quantization-only results on representative LongBench tasks for Llama-3-8B-Instruct~\cite{grattafiori2024llama3}. At 4-bit and 3-bit, the two methods remain close in average score. At 2-bit, however, the \method\ quantizer is noticeably stronger, improving the average over the representative tasks from 25.83 to 28.39, with especially visible gains on HotpotQA and LCC. This pattern suggests that the tile-aligned design is most helpful in the aggressive low-bit regime.
+
+Table~\ref{tab:appendix-quant-crossmodel} summarizes the same comparison on additional model families using representative LongBench tasks. It is intended to show whether the quantization trend transfers under comparable representative-task settings, rather than to support strict cross-row ranking under an identical task set. The \method\ quantizer remains competitive on Llama-2-7B and becomes favorable at 2-bit on Mistral-7B-v0.1, suggesting that its main benefit is improved robustness under aggressive low-bit quantization.
+
+\begin{table}[t]
+\centering
+\caption{Quantization-only comparison on representative LongBench tasks for Llama-3-8B-Instruct. Avg.\ is computed over the reported representative tasks.}
+\label{tab:appendix-quant-llama3}
+\setlength{\tabcolsep}{4pt}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lcccccccc}
+\toprule
+Setting & Bit & NarrativeQA & HotpotQA & GovReport & TREC & PCount & LCC & Avg. \\
+\midrule
+KIVI & 4-bit & \textbf{24.26} & 46.06 & 29.53 & \textbf{74.00} & \textbf{6.50} & 54.07 & 39.07 \\
+\method\ quantizer & 4-bit & 22.47 & \textbf{46.07} & \textbf{30.03} & 73.50 & 5.50 & \textbf{57.20} & \textbf{39.13} \\
+KIVI & 3-bit & 20.81 & 45.64 & \textbf{29.35} & \textbf{74.00} & 6.75 & \textbf{60.94} & \textbf{39.58} \\
+\method\ quantizer & 3-bit & \textbf{21.64} & \textbf{46.62} & 29.16 & 73.50 & \textbf{7.00} & 53.66 & 38.60 \\
+KIVI & 2-bit & 16.55 & 27.50 & 23.91 & \textbf{58.00} & 2.00 & 27.03 & 25.83 \\
+\method\ quantizer & 2-bit & \textbf{17.90} & \textbf{37.93} & \textbf{25.63} & 55.50 & \textbf{3.00} & \textbf{30.37} & \textbf{28.39} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Cross-model quantization-only averages on representative LongBench tasks. $\Delta$ is ``\method\ quantizer minus KIVI''.}
+\label{tab:appendix-quant-crossmodel}
+\setlength{\tabcolsep}{3.5pt}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lcccccccccc}
+\toprule
+Model & Protocol & KIVI 4-bit & \method\ 4-bit & $\Delta$ & KIVI 3-bit & \method\ 3-bit & $\Delta$ & KIVI 2-bit & \method\ 2-bit & $\Delta$ \\
+\midrule
+Llama-3-8B-Instruct & representative LongBench tasks & 39.07 & \textbf{39.13} & \textbf{+0.06} & \textbf{39.58} & 38.60 & -0.98 & 25.83 & \textbf{28.39} & \textbf{+2.56} \\
+Llama-2-7B & representative LongBench tasks & 28.09 & \textbf{28.33} & \textbf{+0.24} & \textbf{28.23} & 27.82 & -0.41 & \textbf{24.33} & 24.17 & -0.16 \\
+Mistral-7B-v0.1 & representative LongBench tasks & \textbf{31.19} & 30.78 & -0.41 & \textbf{30.16} & 29.52 & -0.64 & 23.91 & \textbf{25.72} & \textbf{+1.81} \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\FloatBarrier
+% \section{Additional Sparse-Only Reporting Details}
+% \label{app:diffsparse-extra}
+
+% This appendix provides additional details for the sparse-only differential-sparsity study, including task-level results for the additional models and the corresponding finalized retained configurations. These materials are omitted from the main text for space reasons. As in the main text, all sparse-only results follow the same conservative reporting protocol: candidate differential policies are selected on a small calibration split, re-checked on a disjoint validation split, and reverted to the matched-budget uniform baseline when the differential policy does not yield a stable gain on the final full-task evaluation.
+% \subsection{Task-Level Sparse-Only Results for Additional Models}
+% \label{app:diffsparse-tasklevel}
+
+% Table~\ref{tab:appendix-diffsparse-llama7b}, Table~\ref{tab:appendix-diffsparse-qwen}, Table~\ref{tab:appendix-diffsparse-mistral}, and Table~\ref{tab:appendix-diffsparse-llama13b-70} report finalized sparse-only task-level results for the additional models summarized in the main text. As in the main sparse-only study, ``Differential'' denotes the finalized reported result after applying the same conservative reporting protocol.
+
+% \begin{table}[t]
+% \centering
+% \caption{Task-level sparse-only results on Llama-2-7B~\cite{touvron2023llama2} over six representative LongBench tasks.}
+% \label{tab:appendix-diffsparse-llama7b}
+% \setlength{\tabcolsep}{4pt}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{lccccccc}
+% \toprule
+% Method & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
+% \midrule
+% Uniform-50 & 15.04 & 9.05 & 20.90 & 7.39 & 66.00 & 66.88 & 30.88 \\
+% Differential-50 & 16.94 & 9.05 & 22.92 & 7.39 & 66.00 & 66.91 & 31.54 \\
+% \midrule
+% Uniform-70 & 13.66 & 7.69 & 19.42 & 6.57 & 64.50 & 63.89 & 29.29 \\
+% Differential-70 & 15.00 & 7.88 & 22.73 & 6.96 & 65.50 & 66.59 & 30.78 \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \begin{table}[t]
+% \centering
+% \caption{Task-level sparse-only results on Qwen2.5-7B-Instruct~\cite{yang2024qwen25} over six representative LongBench tasks.}
+% \label{tab:appendix-diffsparse-qwen}
+% \setlength{\tabcolsep}{4pt}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{lccccccc}
+% \toprule
+% Method & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
+% \midrule
+% Uniform-50 & 9.73 & 11.62 & 29.88 & 9.03 & 69.50 & 59.63 & 31.56 \\
+% Differential-50 & 9.73 & 12.05 & 29.88 & 9.03 & 69.50 & 59.86 & 31.68 \\
+% \midrule
+% Uniform-70 & 8.60 & 11.04 & 28.52 & 8.76 & 68.00 & 59.11 & 30.67 \\
+% Differential-70 & 9.33 & 11.72 & 28.61 & 9.68 & 69.00 & 59.11 & 31.24 \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \begin{table}[t]
+% \centering
+% \caption{Task-level sparse-only results on Mistral-7B-v0.1~\cite{jiang2023mistral7b} over six focal LongBench tasks.}
+% \label{tab:appendix-diffsparse-mistral}
+% \setlength{\tabcolsep}{4pt}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{lccccccc}
+% \toprule
+% Method & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
+% \midrule
+% Uniform-50 & 12.99 & 28.89 & 39.92 & 26.24 & 67.50 & 53.46 & 38.17 \\
+% Differential-50 & 12.99 & 29.46 & 40.37 & 26.24 & 67.50 & 53.46 & 38.34 \\
+% \midrule
+% Uniform-70 & 13.38 & 26.64 & 38.83 & 26.67 & 66.50 & 53.44 & 37.58 \\
+% Differential-70 & 13.38 & 26.98 & 40.65 & 26.67 & 67.00 & 53.44 & 38.02 \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \begin{table}[t]
+% \centering
+% \caption{Task-level sparse-only results on Llama-2-13B~\cite{touvron2023llama2} over six focal LongBench tasks at 70\% sparsity.}
+% \label{tab:appendix-diffsparse-llama13b-70}
+% \setlength{\tabcolsep}{4pt}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{lccccccc}
+% \toprule
+% Method & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
+% \midrule
+% Uniform-70 & 7.03 & 5.62 & 13.52 & 13.91 & 51.00 & 57.59 & 24.78 \\
+% Differential-70 & 11.19 & 6.97 & 17.46 & 13.91 & 70.00 & 65.11 & 30.77 \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% For Llama-2-13B~\cite{touvron2023llama2} at 50\% sparsity, most focal tasks do not yet have stable full-task follow-up results under the reporting protocol used in this paper. We therefore omit a task-level table for that setting and report only the finalized average-level summary where available.
+
+% \subsubsection{Finalized Per-Task Reporting Decisions}
+% \label{app:diffsparse-decisions}
+
+% Table~\ref{tab:appendix-diffsparse-decision-summary} summarizes, for each retained model and sparsity budget, how many of the six focal LongBench tasks ultimately keep a differential policy and how many revert to the matched-budget uniform baseline. This summary is intended to clarify the reporting protocol without overloading the main text with task-level bookkeeping.
+
+% \begin{table}[t]
+% \centering
+% \caption{Summary of finalized sparse-only reporting decisions on the six focal LongBench tasks. ``Differential retained'' counts tasks whose final reported full-task result uses a differential policy; ``Uniform revert'' counts tasks whose final reported result reverts to the matched-budget uniform baseline.}
+% \label{tab:appendix-diffsparse-decision-summary}
+% \setlength{\tabcolsep}{6pt}
+% \resizebox{0.86\textwidth}{!}{
+% \begin{tabular}{lccc}
+% \toprule
+% Model & Budget & Differential retained & Uniform revert \\
+% \midrule
+% Llama-3-8B-Instruct & 50\% & 2 / 6 & 4 / 6 \\
+% Llama-3-8B-Instruct & 70\% & 5 / 6 & 1 / 6 \\
+% Llama-2-7B & 50\% & 4 / 6 & 2 / 6 \\
+% Llama-2-7B & 70\% & 6 / 6 & 0 / 6 \\
+% Qwen2.5-7B-Instruct & 50\% & 3 / 6 & 2 / 6, 1 tie \\
+% Qwen2.5-7B-Instruct & 70\% & 5 / 6 & 1 / 6 \\
+% Mistral-7B-v0.1 & 50\% & 2 / 6 & 4 / 6 \\
+% Mistral-7B-v0.1 & 70\% & 3 / 6 & 3 / 6 \\
+% Llama-2-13B & 70\% & 5 / 6 & 1 / 6 \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \FloatBarrier
+% \subsection{Finalized Retained Configurations}
+% \label{app:diffsparse-configs}
+
+% The tables below list the finalized retained configurations used in the sparse-only reporting. For readability, we report the target proportion distribution $[p_0,p_1,p_2]$, the corresponding sparsity levels $[\rho_0,\rho_1,\rho_2]$, and the final reporting decision for each task. Tasks marked as ``uniform revert'' use the matched-budget uniform baseline in the final reported result.
+
+% \begin{table}[t]
+% \centering
+% \caption{Finalized sparse-only retained configurations for Llama-3-8B-Instruct~\cite{grattafiori2024llama3}.}
+% \label{tab:appendix-meta-configs}
+% \scriptsize
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{cccccc}
+% \toprule
+% Budget & Task & Final decision & $[p_0,p_1,p_2]$ & $[\rho_0,\rho_1,\rho_2]$ & Notes \\
+% \midrule
+% 50\% & narrativeqa & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 50\% & qasper & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 50\% & multifieldqa\_en & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 50\% & hotpotqa & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 50\% & trec & differential & $[0.0,0.833333,0.166667]$ & $[0.0,0.4,1.0]$ & value\_aware, max, sink=2 \\
+% 50\% & lcc & differential & $[0.0,0.833333,0.166667]$ & $[0.0,0.4,1.0]$ & value\_aware, max, sink=2 \\
+% \midrule
+% 70\% & narrativeqa & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 70\% & qasper & differential & $[0.0,0.857143,0.142857]$ & $[0.0,0.65,1.0]$ & value\_aware, mean, sink=4 \\
+% 70\% & multifieldqa\_en & differential & $[0.02,0.8,0.18]$ & $[0.0,0.65,1.0]$ & value\_aware, max, sink=4 \\
+% 70\% & hotpotqa & differential & $[0.0,0.75,0.25]$ & $[0.0,0.6,1.0]$ & default settings \\
+% 70\% & trec & differential & $[0.0,0.75,0.25]$ & $[0.0,0.6,1.0]$ & default settings \\
+% 70\% & lcc & differential & $[0.0,0.75,0.25]$ & $[0.0,0.6,1.0]$ & default settings \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \begin{table}[t]
+% \centering
+% \caption{Finalized sparse-only retained configurations for Llama-2-7B~\cite{touvron2023llama2}.}
+% \label{tab:appendix-llama7b-configs}
+% \scriptsize
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{cccccc}
+% \toprule
+% Budget & Task & Final decision & $[p_0,p_1,p_2]$ & $[\rho_0,\rho_1,\rho_2]$ & Notes \\
+% \midrule
+% 50\% & narrativeqa & differential & $[0.0,0.833333,0.166667]$ & $[0.0,0.4,1.0]$ & value\_aware, max, sink=2 \\
+% 50\% & qasper & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 50\% & multifieldqa\_en & differential & $[0.05,0.75,0.20]$ & $[0.0,0.4,1.0]$ & value\_aware, max, sink=2 \\
+% 50\% & hotpotqa & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 50\% & trec & differential & $[0.0,0.833333,0.166667]$ & $[0.0,0.4,1.0]$ & value\_aware, max, sink=2 \\
+% 50\% & lcc & differential & $[0.0,1.0,0.0]$ & $[0.0,0.5,1.0]$ & value\_aware, max, sink=2 \\
+% \midrule
+% 70\% & narrativeqa & differential & $[0.1,0.444444,0.455556]$ & $[0.0,0.55,1.0]$ & value\_aware, mean, sink=8 \\
+% 70\% & qasper & differential & $[0.1,0.444444,0.455556]$ & $[0.0,0.55,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & multifieldqa\_en & differential & $[0.15,0.375,0.475]$ & $[0.0,0.6,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & hotpotqa & differential & $[0.15,0.6,0.25]$ & $[0.0,0.75,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & trec & differential & $[0.0,0.6,0.4]$ & $[0.0,0.5,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & lcc & differential & $[0.0,0.666667,0.333333]$ & $[0.0,0.55,1.0]$ & value\_aware, max, sink=2 \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \begin{table}[t]
+% \centering
+% \caption{Finalized sparse-only retained configurations for Qwen2.5-7B-Instruct~\cite{yang2024qwen25}.}
+% \label{tab:appendix-qwen-configs}
+% \scriptsize
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{cccccc}
+% \toprule
+% Budget & Task & Final decision & $[p_0,p_1,p_2]$ & $[\rho_0,\rho_1,\rho_2]$ & Notes \\
+% \midrule
+% 50\% & narrativeqa & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 50\% & qasper & differential & $[0.15,0.7,0.15]$ & $[0.0,0.5,1.0]$ & value\_aware, max, sink=2 \\
+% 50\% & multifieldqa\_en & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 50\% & hotpotqa & differential tie & $[0.0,1.0,0.0]$ & $[0.0,0.5,1.0]$ & final full result ties uniform \\
+% 50\% & trec & differential tie & $[0.0,1.0,0.0]$ & $[0.0,0.5,1.0]$ & final full result ties uniform \\
+% 50\% & lcc & differential & $[0.05,0.9,0.05]$ & $[0.0,0.5,1.0]$ & value\_aware, max, sink=2 \\
+% \midrule
+% 70\% & narrativeqa & differential & $[0.0,0.75,0.25]$ & $[0.0,0.6,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & qasper & differential & $[0.0,0.75,0.25]$ & $[0.0,0.6,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & multifieldqa\_en & differential & $[0.1,0.4,0.5]$ & $[0.0,0.5,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & hotpotqa & differential & $[0.0,0.6,0.4]$ & $[0.0,0.5,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & trec & differential & $[0.0,0.6,0.4]$ & $[0.0,0.5,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & lcc & uniform revert & -- & -- & revert to matched-budget uniform \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \begin{table}[t]
+% \centering
+% \caption{Finalized sparse-only retained configurations for Mistral-7B-v0.1~\cite{jiang2023mistral7b}.}
+% \label{tab:appendix-mistral-configs}
+% \scriptsize
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{cccccc}
+% \toprule
+% Budget & Task & Final decision & $[p_0,p_1,p_2]$ & $[\rho_0,\rho_1,\rho_2]$ & Notes \\
+% \midrule
+% 50\% & narrativeqa & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 50\% & qasper & differential & $[0.0,0.833333,0.166667]$ & $[0.0,0.4,1.0]$ & value\_aware, max, sink=2 \\
+% 50\% & multifieldqa\_en & differential & $[0.0,0.833333,0.166667]$ & $[0.0,0.4,1.0]$ & value\_aware, max, sink=2 \\
+% 50\% & hotpotqa & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 50\% & trec & differential tie & $[0.0,0.833333,0.166667]$ & $[0.0,0.4,1.0]$ & final full result ties uniform \\
+% 50\% & lcc & uniform revert & -- & -- & revert to matched-budget uniform \\
+% \midrule
+% 70\% & narrativeqa & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 70\% & qasper & differential & $[0.025,0.785714,0.189286]$ & $[0.0,0.65,1.0]$ & value\_aware, mean, sink=2, prr=1.0 \\
+% 70\% & multifieldqa\_en & differential & $[0.05,0.625,0.325]$ & $[0.0,0.6,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & hotpotqa & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 70\% & trec & differential & $[0.0,0.6,0.4]$ & $[0.0,0.5,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & lcc & uniform revert & -- & -- & revert to matched-budget uniform \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \begin{table}[t]
+% \centering
+% \caption{Finalized sparse-only retained configurations for Llama-2-13B. Only the 70\% setting is reported at task level because stable full-task 50\% follow-up results are not yet available for most focal tasks.}
+% \label{tab:appendix-llama13b-configs}
+% \scriptsize
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{cccccc}
+% \toprule
+% Budget & Task & Final decision & $[p_0,p_1,p_2]$ & $[\rho_0,\rho_1,\rho_2]$ & Notes \\
+% \midrule
+% 70\% & narrativeqa & differential & $[0.05,0.714286,0.235714]$ & $[0.0,0.65,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & qasper & differential & $[0.0,0.75,0.25]$ & $[0.0,0.6,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & multifieldqa\_en & differential & $[0.0,0.857143,0.142857]$ & $[0.0,0.65,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & hotpotqa & uniform revert & -- & -- & revert to matched-budget uniform \\
+% 70\% & trec & differential & $[0.0,0.6,0.4]$ & $[0.0,0.5,1.0]$ & value\_aware, max, sink=2 \\
+% 70\% & lcc & differential & $[0.15,0.428571,0.421429]$ & $[0.0,0.65,1.0]$ & value\_aware, max, sink=2 \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \section{Additional Joint Sparse-Quant Results}
+% \label{app:joint-details}
+
+% This appendix provides additional task-level results for the joint sparse-quant comparison summarized in Table~\ref{tab:cross-model}. Since Llama-3-8B-Instruct is already reported in detail in Table~\ref{tab:main-accuracy}, we focus here on the additional model families. For each model, we report results on the same six focal LongBench tasks used in the main text: NarrativeQA, Qasper, \multifieldqa, HotpotQA, TREC, and LCC.
+
+% Overall, the task-level breakdowns are consistent with the trend reported in the main text. The gains of \method\ over the sequential M+K baseline are more visible under tighter compression budgets, whereas the milder 50/50 settings remain more mixed. In particular, improvements often concentrate on a subset of tasks rather than appearing uniformly across all six tasks.
+
+% \begin{table}[t]
+% \centering
+% \caption{Task-level joint sparse-quant results on Llama-2-7B~\cite{touvron2023llama2}.}
+% \label{tab:appendix-joint-llama2}
+% \setlength{\tabcolsep}{4pt}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{lccccccc}
+% \toprule
+% Setting & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
+% \midrule
+% M+K, 50/50 + 4-bit & 15.91 & \textbf{9.26} & 21.91 & 7.45 & \textbf{66.00} & 67.49 & 31.34 \\
+% \method, 50/50 + 4-bit & \textbf{15.93} & 8.70 & \textbf{22.51} & \textbf{7.58} & \textbf{66.00} & \textbf{67.50} & \textbf{31.37} \\
+% M+K, 50/50 + 2-bit & \textbf{17.95} & \textbf{9.66} & \textbf{23.49} & \textbf{7.47} & 65.50 & 65.00 & \textbf{31.51} \\
+% \method, 50/50 + 2-bit & 13.53 & 8.58 & 20.13 & 7.13 & \textbf{66.00} & \textbf{66.00} & 30.23 \\
+% M+K, 70/70 + 4-bit & \textbf{15.13} & \textbf{8.29} & \textbf{22.04} & \textbf{7.56} & 64.50 & 65.91 & 30.57 \\
+% \method, 70/70 + 4-bit & 14.70 & \textbf{8.29} & 21.89 & 7.33 & \textbf{66.00} & \textbf{67.60} & \textbf{30.97} \\
+% M+K, 70/70 + 2-bit & \textbf{15.96} & 7.68 & \textbf{21.29} & 7.05 & 63.50 & 64.01 & 29.92 \\
+% \method, 70/70 + 2-bit & 15.07 & \textbf{8.38} & 18.97 & \textbf{7.29} & \textbf{65.50} & \textbf{65.33} & \textbf{30.09} \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \begin{table}[t]
+% \centering
+% \caption{Task-level joint sparse-quant results on Mistral-7B-v0.1~\cite{jiang2023mistral7b}.}
+% \label{tab:appendix-joint-mistral}
+% \setlength{\tabcolsep}{4pt}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{lccccccc}
+% \toprule
+% Setting & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
+% \midrule
+% M+K, 50/50 + 4-bit & 13.12 & 8.47 & \textbf{30.73} & \textbf{9.44} & \textbf{69.00} & \textbf{66.31} & 32.84 \\
+% \method, 50/50 + 4-bit & \textbf{13.60} & \textbf{8.91} & 30.69 & 9.37 & \textbf{69.00} & 65.84 & \textbf{32.90} \\
+% M+K, 50/50 + 2-bit & \textbf{15.63} & 7.73 & 27.73 & 9.60 & 66.50 & 63.04 & 31.70 \\
+% \method, 50/50 + 2-bit & 14.31 & \textbf{8.42} & \textbf{27.97} & \textbf{9.85} & \textbf{68.00} & \textbf{65.65} & \textbf{32.37} \\
+% M+K, 70/70 + 4-bit & 12.64 & 8.18 & 29.96 & 9.37 & \textbf{69.00} & 65.44 & 32.43 \\
+% \method, 70/70 + 4-bit & \textbf{12.84} & \textbf{8.36} & \textbf{30.79} & \textbf{9.61} & 68.50 & \textbf{66.14} & \textbf{32.71} \\
+% M+K, 70/70 + 2-bit & 12.17 & 7.11 & 24.22 & \textbf{9.52} & 64.50 & 63.35 & 30.14 \\
+% \method, 70/70 + 2-bit & \textbf{14.67} & \textbf{7.99} & \textbf{28.17} & 9.50 & \textbf{69.00} & \textbf{64.79} & \textbf{32.35} \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \begin{table}[t]
+% \centering
+% \caption{Task-level joint sparse-quant results on Qwen2.5-7B-Instruct~\cite{yang2024qwen25}.}
+% \label{tab:appendix-joint-qwen}
+% \setlength{\tabcolsep}{4pt}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{lccccccc}
+% \toprule
+% Setting & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. \\
+% \midrule
+% M+K, 50/50 + 4-bit & 15.37 & 17.82 & 26.34 & 27.20 & 64.50 & 35.82 & 31.17 \\
+% \method, 50/50 + 4-bit & \textbf{17.64} & \textbf{29.76} & \textbf{34.02} & \textbf{31.52} & \textbf{65.00} & \textbf{44.53} & \textbf{37.08} \\
+% M+K, 50/50 + 2-bit & \textbf{13.13} & 13.32 & 20.62 & 21.40 & \textbf{59.25} & \textbf{28.90} & \textbf{26.10} \\
+% \method, 50/50 + 2-bit & 11.84 & \textbf{16.57} & \textbf{23.41} & \textbf{23.62} & 46.00 & 19.44 & 23.48 \\
+% M+K, 70/70 + 4-bit & 17.11 & 19.54 & 30.24 & 29.83 & 62.00 & 39.28 & 33.00 \\
+% \method, 70/70 + 4-bit & \textbf{19.11} & \textbf{28.61} & \textbf{40.84} & \textbf{33.28} & \textbf{65.50} & \textbf{50.66} & \textbf{39.67} \\
+% M+K, 70/70 + 2-bit & 11.98 & 14.42 & 20.44 & 23.06 & 57.25 & 25.90 & 25.51 \\
+% \method, 70/70 + 2-bit & \textbf{17.88} & \textbf{26.45} & \textbf{30.99} & \textbf{30.76} & \textbf{59.00} & \textbf{46.13} & \textbf{35.20} \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}

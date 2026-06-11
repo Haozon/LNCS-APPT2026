@@ -1,0 +1,262 @@
+
+% \section{Threshold Stability for Prefill-to-Decode Reuse}
+% \label{sec:appendix-threshold-reuse}
+
+% We evaluate whether thresholds estimated from normalized prefill attention can
+% be reused during decoding. Using Llama-3-8B-Instruct on seven datasets
+% (WikiText-2, GSM8K, MuSiQue, Qasper, \multifieldqa, NarrativeQA, and
+% HotpotQA), we compute the same layer-wise thresholds used by \method\ from 10
+% samples per dataset, with maximum length 192 and representative layers 10 and
+% 20.
+
+% Table~\ref{tab:appendix-threshold-reuse} and
+% Figure~\ref{fig:appendix-threshold-reuse} show that the thresholds remain
+% concentrated within a bounded range at each fixed layer. The absolute scale is
+% layer dependent, so the supported reuse target is a fixed pair of per-layer
+% thresholds, rather than one global threshold shared by all layers.
+
+% \begin{table}[t]
+% \centering
+% \caption{Cross-dataset stability of normalized attention thresholds. CV is
+% computed from per-dataset median thresholds.}
+% \label{tab:appendix-threshold-reuse}
+% \scriptsize
+% \setlength{\tabcolsep}{4pt}
+% \begin{tabular}{lcccc}
+% \toprule
+% Layer & $\tau_{\text{high}}$ range & CV (\%) & $\tau_{\text{low}}$ range & CV (\%) \\
+% \midrule
+% 10 & 0.67120--0.92427 & 10.21 & 0.04243--0.06552 & 14.37 \\
+% 20 & 0.35568--0.61690 & 19.40 & 0.01732--0.02890 & 19.82 \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
+
+% \begin{figure}[t]
+% \centering
+% \begin{minipage}[t]{0.47\linewidth}
+% \centering
+% \includegraphics[width=\linewidth]{\attnscorefigdir/layer10_normalized_attention_thresholds.pdf}
+% \end{minipage}\hfill
+% \begin{minipage}[t]{0.47\linewidth}
+% \centering
+% \includegraphics[width=\linewidth]{\attnscorefigdir/layer20_normalized_attention_thresholds.pdf}
+% \end{minipage}
+% \caption{Cross-dataset distributions of the normalized attention thresholds.
+% Left: Layer 10. Right: Layer 20.}
+% \label{fig:appendix-threshold-reuse}
+% \end{figure}
+
+% \section{Additional Quantization-Only Comparison}
+% \label{app:quant-only}
+
+% We isolate the low-bit representation by comparing the \method\ quantizer with
+% KIVI. Both methods use a residual window of 128 tokens. KIVI applies
+% channel-wise quantization to keys and per-token-head quantization to values with
+% group size 128, while the \method\ quantizer uses per-token-tile quantization
+% and tile-wise Hadamard rotation with tile size 64.
+
+% Table~\ref{tab:appendix-quant-crossmodel} summarizes the average scores. The
+% two quantizers are close at 4-bit and 3-bit, while the \method\ quantizer is
+% more favorable in the aggressive 2-bit regime on Llama-3-8B-Instruct and
+% Mistral-7B-v0.1.
+
+% \begin{table}[t]
+% \centering
+% \caption{Cross-model averages for the quantization-only comparison. Llama-3-8B-Instruct and Llama-2-7B use full LongBench; Mistral-7B-v0.1 uses the same six representative LongBench tasks as in the main text. $\Delta$ is ``\method\ quantizer minus KIVI''.}
+% \label{tab:appendix-quant-crossmodel}
+% \scriptsize
+% \setlength{\tabcolsep}{3.5pt}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{lcccccccccc}
+% \toprule
+% Model & Protocol & KIVI 4-bit & \method\ 4-bit & $\Delta$ & KIVI 3-bit & \method\ 3-bit & $\Delta$ & KIVI 2-bit & \method\ 2-bit & $\Delta$ \\
+% \midrule
+% Llama-3-8B-Instruct & full LongBench & 42.87 & 42.72 & -0.15 & 41.80 & 41.48 & -0.32 & 26.94 & \textbf{30.59} & \textbf{+3.65} \\
+% Llama-2-7B & full LongBench & 28.09 & \textbf{28.33} & \textbf{+0.24} & \textbf{28.23} & 27.82 & -0.41 & \textbf{24.33} & 24.17 & -0.16 \\
+% Mistral-7B-v0.1 & six representative tasks & \textbf{31.19} & 30.78 & -0.41 & \textbf{30.16} & 29.52 & -0.64 & 23.91 & \textbf{25.72} & \textbf{+1.81} \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% The strongest quantization-only difference appears at 2-bit. To make this
+% effect more concrete, Table~\ref{tab:appendix-quant-llama3-2bit} reports a
+% representative Llama-3-8B-Instruct task breakdown from the full LongBench run.
+% The largest gain is on HotpotQA, while LCC and GovReport also improve; TREC is
+% the main selected task where KIVI remains stronger.
+
+% \begin{table}[t]
+% \centering
+% \caption{Representative 2-bit quantization-only breakdown on Llama-3-8B-Instruct.
+% Avg.\ is the full 16-task LongBench average. $\Delta$ is ``\method\ quantizer
+% minus KIVI''.}
+% \label{tab:appendix-quant-llama3-2bit}
+% \scriptsize
+% \setlength{\tabcolsep}{4pt}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{lccccccc}
+% \toprule
+% Setting & NarrativeQA & HotpotQA & GovReport & TREC & PCount & LCC & Avg. \\
+% \midrule
+% KIVI 2-bit & 16.55 & 27.50 & 23.91 & 58.00 & 2.00 & 27.03 & 26.94 \\
+% \method\ quantizer 2-bit & 17.90 & 37.93 & 25.63 & 55.50 & 3.00 & 30.37 & 30.59 \\
+% $\Delta$ & +1.35 & +10.43 & +1.72 & -2.50 & +1.00 & +3.34 & +3.65 \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \section{Additional Sparse-Only Reporting Details}
+% \label{app:diffsparse-extra}
+
+% Table~\ref{tab:appendix-diffsparse-summary} summarizes the additional
+% sparse-only results and the finalized reporting decisions under the same
+% conservative protocol used in the main text. Across the retained models,
+% differential sparsity gives non-negative average changes, with larger gains
+% generally appearing at the tighter 70\% sparsity budget.
+
+% \begin{table}[t]
+% \centering
+% \caption{Sparse-only average results and finalized reporting decisions on the
+% six representative LongBench tasks. $\Delta$ is ``Differential minus
+% Uniform''.}
+% \label{tab:appendix-diffsparse-summary}
+% \scriptsize
+% \setlength{\tabcolsep}{4pt}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{lccccc}
+% \toprule
+% Model & Budget & Uniform Avg. & Differential Avg. & $\Delta$ & Final decisions \\
+% \midrule
+% Llama-3-8B-Instruct & 50\% & 47.59 & \textbf{47.85} & +0.26 & 2 differential, 4 uniform \\
+% Llama-3-8B-Instruct & 70\% & 45.80 & \textbf{46.61} & +0.81 & 5 differential, 1 uniform \\
+% Llama-2-7B & 50\% & 30.88 & \textbf{31.54} & +0.66 & 4 differential, 2 uniform \\
+% Llama-2-7B & 70\% & 29.29 & \textbf{30.78} & +1.49 & 6 differential, 0 uniform \\
+% Qwen2.5-7B-Instruct & 50\% & 31.56 & \textbf{31.68} & +0.12 & 3 differential, 2 uniform, 1 tie \\
+% Qwen2.5-7B-Instruct & 70\% & 30.67 & \textbf{31.24} & +0.57 & 5 differential, 1 uniform \\
+% Mistral-7B-v0.1 & 50\% & 38.17 & \textbf{38.34} & +0.17 & 2 differential, 4 uniform \\
+% Mistral-7B-v0.1 & 70\% & 37.58 & \textbf{38.02} & +0.44 & 3 differential, 3 uniform \\
+% Llama-2-13B & 70\% & 24.78 & \textbf{30.77} & +5.99 & 5 differential, 1 uniform \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% To show where the tighter-budget sparse-only gains come from,
+% Table~\ref{tab:appendix-diffsparse-task-delta} reports the task-level score
+% changes at 70\% sparsity. The gains are not uniform across tasks, but the
+% finalized differential policy avoids negative average regressions under the
+% fallback protocol. The Llama-2-13B result is especially strong because TREC and
+% LCC recover substantially under the differential allocation.
+
+% \begin{table}[t]
+% \centering
+% \caption{Task-level sparse-only score differences at 70\% sparsity. Values are
+% ``Differential minus Uniform''.}
+% \label{tab:appendix-diffsparse-task-delta}
+% \scriptsize
+% \setlength{\tabcolsep}{4pt}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{lccccccc}
+% \toprule
+% Model & NarrativeQA & Qasper & \multifieldqaheader & HotpotQA & TREC & LCC & Avg. $\Delta$ \\
+% \midrule
+% Llama-2-7B & +1.34 & +0.19 & +3.31 & +0.39 & +1.00 & +2.70 & +1.49 \\
+% Qwen2.5-7B-Instruct & +0.73 & +0.68 & +0.09 & +0.92 & +1.00 & +0.00 & +0.57 \\
+% Mistral-7B-v0.1 & +0.00 & +0.34 & +1.82 & +0.00 & +0.50 & +0.00 & +0.44 \\
+% Llama-2-13B & +4.16 & +1.35 & +3.94 & +0.00 & +19.00 & +7.52 & +5.99 \\
+% \bottomrule
+% \end{tabular}}
+% \end{table}
+
+% \section{Additional Joint Sparse-Quant Results}
+% \label{app:joint-details}
+
+% Since the Llama-3-8B-Instruct task-level results are reported in the main text,
+% we summarize the additional model families by average score differences in
+% Table~\ref{tab:appendix-joint-delta}. The results remain non-uniform across
+% models and budgets, but the largest gains appear in tighter sparse-quant
+% settings, especially for Mistral-7B-v0.1 and Qwen2.5-7B-Instruct.
+
+% \begin{table}[t]
+% \centering
+% \caption{Average score difference between \method\ and the sequential M+K
+% baseline on additional model families. Positive values favor \method.}
+% \label{tab:appendix-joint-delta}
+% \scriptsize
+% \setlength{\tabcolsep}{6pt}
+% \begin{tabular}{lcccc}
+% \toprule
+% Model & 50/50 + 4-bit & 50/50 + 2-bit & 70/70 + 4-bit & 70/70 + 2-bit \\
+% \midrule
+% Llama-2-7B & +0.03 & -1.28 & +0.40 & +0.17 \\
+% Mistral-7B-v0.1 & +0.06 & +0.67 & +0.28 & +2.21 \\
+% Qwen2.5-7B-Instruct & +5.91 & -2.62 & +6.67 & +9.69 \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
+
+% Table~\ref{tab:appendix-joint-wins} further reports how often \method\ is
+% higher than, tied with, or lower than M+K across the six tasks. This makes the
+% non-uniformity in Table~\ref{tab:appendix-joint-delta} more explicit: the
+% Llama-2-7B gains are mixed, Mistral-7B-v0.1 becomes broadly positive under
+% tighter settings, and Qwen2.5-7B-Instruct shows broad gains except at
+% 50/50 + 2-bit.
+
+% \begin{table}[t]
+% \centering
+% \caption{Task-level win/tie/loss counts for \method\ against M+K over six
+% tasks. Each cell is win/tie/loss.}
+% \label{tab:appendix-joint-wins}
+% \scriptsize
+% \setlength{\tabcolsep}{6pt}
+% \begin{tabular}{lcccc}
+% \toprule
+% Model & 50/50 + 4-bit & 50/50 + 2-bit & 70/70 + 4-bit & 70/70 + 2-bit \\
+% \midrule
+% Llama-2-7B & 4/1/1 & 2/0/4 & 2/1/3 & 4/0/2 \\
+% Mistral-7B-v0.1 & 2/1/3 & 5/0/1 & 5/0/1 & 5/0/1 \\
+% Qwen2.5-7B-Instruct & 6/0/0 & 3/0/3 & 6/0/0 & 6/0/0 \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
+
+% Taken together, these task-level counts clarify the role of the joint design.
+% The average gains in Table~\ref{tab:appendix-joint-delta} do not require
+% uniform improvements on every task, but they become more reliable as the
+% compression budget tightens. Mistral-7B-v0.1 improves on five of six tasks in
+% the 50/50 + 2-bit, 70/70 + 4-bit, and 70/70 + 2-bit settings, while
+% Qwen2.5-7B-Instruct improves on all six tasks in the two 4-bit settings and in
+% the 70/70 + 2-bit setting. The weaker 50/50 + 2-bit cases therefore remain
+% visible rather than hidden by averages, which is consistent with the main-text
+% claim that the benefit of \method\ is favorable but model- and budget-dependent.
+
+% Aggregating the same results across the three additional models gives a compact
+% view of the compression-setting trend. Table~\ref{tab:appendix-joint-aggregate}
+% shows that 70/70 + 2-bit is the strongest setting overall, with 15 wins over 18
+% model-task pairs and the largest mean average gain. The 50/50 + 2-bit setting is
+% more mixed: it still wins on 10 of 18 task instances, but the losses are large
+% enough to make the mean average difference negative.
+
+% \begin{table}[t]
+% \centering
+% \caption{Aggregate joint sparse-quant trends over the three additional models.
+% Mean avg.\ $\Delta$ averages the model-level average differences in
+% Table~\ref{tab:appendix-joint-delta}; win/tie/loss is aggregated over 18
+% model-task pairs.}
+% \label{tab:appendix-joint-aggregate}
+% \scriptsize
+% \setlength{\tabcolsep}{5pt}
+% \begin{tabular}{lccc}
+% \toprule
+% Setting & Mean avg. $\Delta$ & Win/tie/loss & Main pattern \\
+% \midrule
+% 50/50 + 4-bit & +2.00 & 12/2/4 & positive, Qwen-driven \\
+% 50/50 + 2-bit & -1.08 & 10/0/8 & mixed with larger losses \\
+% 70/70 + 4-bit & +2.45 & 13/1/4 & broader positive trend \\
+% 70/70 + 2-bit & +4.12 & 15/0/3 & strongest tight-budget case \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
+\fi
+
+
+

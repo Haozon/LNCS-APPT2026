@@ -1,0 +1,72 @@
+Paper title:
+JSQKV: Joint Sparsification and Quantization for KV-Cache Compression and Decode Acceleration
+
+Corresponding author:
+Xiaoli Gong
+
+Corresponding author's email address:
+gongxiaoli@nankai.edu.cn
+
+Full author list in paper order:
+1. Hao Zhang
+2. Xiaoli Gong
+3. Haoran Li
+4. Huayou Su
+5. Qingxia Chen
+6. Jin Zhang
+
+Detailed author information:
+
+Author 1
+Full name as it should appear in the paper: Hao Zhang
+Given name(s): Hao
+Family name: Zhang
+Affiliation: College of Computer Science, Nankai University, Tianjin, China
+Email address: 2120230710@nankai.edu.cn
+ORCID: 0009-0001-1044-0312
+Corresponding author: No
+
+Author 2
+Full name as it should appear in the paper: Xiaoli Gong
+Given name(s): Xiaoli
+Family name: Gong
+Affiliation: College of Computer Science, Nankai University, Tianjin, China
+Email address: gongxiaoli@nankai.edu.cn
+ORCID: 0000-0002-9836-558X
+Corresponding author: Yes
+
+Author 3
+Full name as it should appear in the paper: Haoran Li
+Given name(s): Haoran
+Family name: Li
+Affiliation: College of Computer Science, Nankai University, Tianjin, China
+Email address: wanch_lhr@nankai.edu.cn
+ORCID:
+Corresponding author: No
+
+Author 4
+Full name as it should appear in the paper: Huayou Su
+Given name(s): Huayou
+Family name: Su
+Affiliation: National University of Defense Technology, Changsha, China
+Email address: shyou@nudt.edu.cn
+ORCID:
+Corresponding author: No
+
+Author 5
+Full name as it should appear in the paper: Qingxia Chen
+Given name(s): Qingxia
+Family name: Chen
+Affiliation: Qian Xuesen Laboratory of Space Technology, Beijing, China
+Email address: chenqingxia_0882@163.com
+ORCID:
+Corresponding author: No
+
+Author 6
+Full name as it should appear in the paper: Jin Zhang
+Given name(s): Jin
+Family name: Zhang
+Affiliation: College of Computer Science, Nankai University, Tianjin, China
+Email address: nkzhangjin@nankai.edu.cn
+ORCID: 0000-0001-9086-1178
+Corresponding author: No
