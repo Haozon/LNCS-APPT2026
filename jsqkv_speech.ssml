@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<speak version="1.0"
+       xmlns="http://www.w3.org/2001/10/synthesis"
+       xmlns:mstts="https://www.w3.org/2001/mstts"
+       xml:lang="en-US">
+  <voice name="en-US-AndrewMultilingualNeural">
+    <prosody rate="-6%">
+
+      <!-- SLIDE 1 : Title -->
+      <bookmark mark="slide01"/>
+      Good morning, everyone. Thank you for being here.
+      <break time="300ms"/>
+      My name is Hao Zhang, from the College of Computer Science at Nankai University.
+      <break time="400ms"/>
+      Today I'll present our work,
+      <emphasis level="moderate"><say-as interpret-as="characters">JSQKV</say-as></emphasis>
+      <break time="200ms"/>
+      a joint sparsification and quantization framework for
+      <say-as interpret-as="characters">KV</say-as> cache compression and decode acceleration.
+      <break time="400ms"/>
+      This is joint work with my collaborators at Nankai University,
+      the National University of Defense Technology,
+      and the Qian Xuesen Laboratory.
+      <break time="900ms"/>
+
+      <!-- SLIDE 2 : Motivation -->
+      <bookmark mark="slide02"/>
+      Let me start with the problem.
+      <break time="300ms"/>
+      As context windows keep growing, the real bottleneck of autoregressive decoding
+      is no longer computation. It's the
+      <emphasis level="moderate"><say-as interpret-as="characters">KV</say-as> cache</emphasis>.
+      <break time="500ms"/>
+      The <say-as interpret-as="characters">KV</say-as> cache grows
+      <emphasis level="moderate">linearly</emphasis> with context length,
+      and it is re-read at <emphasis level="moderate">every single decode step</emphasis>.
+      <break time="300ms"/>
+      So in long-context serving, it dominates memory footprint and memory bandwidth,
+      and it caps throughput, batch size, and deployment efficiency.
+      <break time="300ms"/>
+      The key point: decoding is <emphasis level="moderate">memory-bound</emphasis>.
+      Bandwidth, not <say-as interpret-as="characters">FLOP</say-as>s, is the true limiter.
+      <break time="500ms"/>
+      To address this, the community has two mainstream directions:
+      <break time="200ms"/>
+      sparsification, evicting or pruning less useful <say-as interpret-as="characters">KV</say-as> states,
+      <break time="200ms"/>
+      and low-bit quantization, reducing the numerical precision of what's kept.
+      <break time="900ms"/>
+
+      <!-- SLIDE 3 : Challenge -->
+      <bookmark mark="slide03"/>
+      Both directions work well on their own.
+      The natural idea is to simply combine them: sparsify, then quantize.
+      <break time="300ms"/>
+      But that naive chaining <emphasis level="moderate">does not work</emphasis>,
+      for two reasons.
+      <break time="500ms"/>
+      First, a representation and execution gap.
+      Sparsification changes not just how <emphasis level="moderate">much</emphasis>
+      <say-as interpret-as="characters">KV</say-as> you keep,
+      but the retained token and feature <emphasis level="moderate">layout</emphasis>.
+      <break time="250ms"/>
+      That shifts quantization granularity, the compressed data layout, and the decode kernel,
+      so algorithmic compression gains don't automatically become lower memory traffic.
+      <break time="500ms"/>
+      Second, an online decision gap.
+      Token-differential compression is easy in prefill, where future attention is observable.
+      <break time="250ms"/>
+      But during decoding, a token must be cached
+      <emphasis level="moderate">before</emphasis> we know how important it will be.
+      <break time="500ms"/>
+      So the real challenge: preserve model quality under aggressive compression,
+      <emphasis level="moderate">and</emphasis> keep the compressed representation
+      directly executable for real speedup.
+      <break time="900ms"/>
+
+      <!-- SLIDE 4 : Overview and contributions -->
+      <bookmark mark="slide04"/>
+      Our answer is <say-as interpret-as="characters">JSQKV</say-as>,
+      a unified sparse-quant decode pipeline.
+      <break time="300ms"/>
+      Instead of treating sparsity and quantization as separate post-processing steps,
+      we <emphasis level="moderate">co-design</emphasis> three things together:
+      the compression policy, the compressed format, and the execution path.
+      <break time="500ms"/>
+      Concretely, there are four contributions, and I'll walk through each:
+      <break time="200ms"/>
+      differential sparsity, a budgeted three-level token policy;
+      <break time="200ms"/>
+      a dual-window mechanism that makes it work online;
+      <break time="200ms"/>
+      Per-Token-Tile quantization with
+      <phoneme alphabet="ipa" ph="ˈhædəmɑrd">Hadamard</phoneme> rotation;
+      <break time="200ms"/>
+      and a bitmap-based sparse-quant kernel that loads compressed but computes dense.
+      <break time="900ms"/>
+
+      <!-- SLIDE 5 : Method 1, Differential sparsity -->
+      <bookmark mark="slide05"/>
+      First module: budgeted differential sparsity.
+      <break time="300ms"/>
+      The idea is simple. Not all tokens deserve the same compression.
+      A fixed sparsity ratio wastes budget on unimportant tokens
+      and over-compresses important ones.
+      <break time="500ms"/>
+      So we estimate token importance from prefill attention:
+      each token's score is the average attention it receives
+      from the last few observation-window queries,
+      in the Snap<say-as interpret-as="characters">KV</say-as> style, length-normalized.
+      <break time="500ms"/>
+      Then we assign every token to one of <emphasis level="moderate">three levels</emphasis>.
+      <break time="250ms"/>
+      Level zero, the most important, stays dense.
+      <break time="200ms"/>
+      Level one keeps only the top-magnitude features in its key and value vectors.
+      <break time="200ms"/>
+      Level two, the least important, is evicted entirely.
+      <break time="300ms"/>
+      Two percentile thresholds split the tokens under a target average budget B,
+      and a small calibration search picks the best allocation at that fixed budget.
+      <break time="250ms"/>
+      As we'll see, this matters most when the budget is <emphasis level="moderate">tight</emphasis>.
+      <break time="900ms"/>
+
+      <!-- SLIDE 6 : Method 2, Dual-window -->
+      <bookmark mark="slide06"/>
+      But that policy needs future attention, which we don't have
+      when a token is first generated.
+      <break time="250ms"/>
+      That's the second module: the dual-window mechanism.
+      <break time="500ms"/>
+      The trick is to <emphasis level="moderate">delay</emphasis> compression
+      until enough future evidence accumulates.
+      <break time="300ms"/>
+      We keep two windows. Window A holds tokens waiting to be compressed.
+      Window B holds newly generated tokens, and their queries
+      <emphasis level="moderate">observe</emphasis> Window A,
+      supplying the missing future attention.
+      <break time="500ms"/>
+      Three steps:
+      <break time="200ms"/>
+      we accumulate each new query's attention to Window A;
+      <break time="200ms"/>
+      we normalize by the number of observations, since earlier tokens are seen by more queries;
+      <break time="200ms"/>
+      and we classify and slide, comparing against the same thresholds,
+      compressing Window A into history, and Window B becomes the new Window A.
+      <break time="500ms"/>
+      Importantly, each token is observed before it's compressed,
+      and the number of uncompressed tokens stays bounded.
+      We also show these prefill thresholds are stable enough to reuse.
+      <break time="900ms"/>
+
+      <!-- SLIDE 7 : Method 3, Quantization and Hadamard -->
+      <bookmark mark="slide07"/>
+      Third module: quantizing what remains.
+      <break time="300ms"/>
+      We use Per-Token-Tile quantization: splitting each key or value vector into small tiles,
+      and quantizing each tile independently with its own scale and zero-point.
+      <break time="250ms"/>
+      This aligns the quantization unit with our token-level decisions
+      and the tile-based decode path.
+      <break time="500ms"/>
+      The problem is that key states carry <emphasis level="moderate">outliers</emphasis>
+      that wreck aggressive low-bit quantization.
+      <break time="300ms"/>
+      Our fix is an orthogonal <phoneme alphabet="ipa" ph="ˈhædəmɑrd">Hadamard</phoneme>
+      rotation applied to queries and keys before quantizing.
+      It suppresses the heavy tails you can see in the figure,
+      and because it's orthogonal, it <emphasis level="moderate">exactly</emphasis>
+      preserves attention scores.
+      <break time="500ms"/>
+      The effect is dramatic. Look at the two-bit column:
+      plain round-to-nearest blows up to a perplexity of
+      <emphasis level="moderate">115</emphasis>,
+      while <phoneme alphabet="ipa" ph="ˈhædəmɑrd">Hadamard</phoneme> rotation
+      brings it down to <emphasis level="moderate">5.35</emphasis>,
+      and it stays compatible with the sparsification that follows.
+      <break time="900ms"/>
+
+      <!-- SLIDE 8 : Method 4, Format and kernel -->
+      <bookmark mark="slide08"/>
+      The final module is where compression turns into <emphasis level="moderate">real speedup</emphasis>.
+      We co-design the storage format and the decode kernel.
+      <break time="500ms"/>
+      Each one-by-sixty-four tile stores a bitmap of nonzero positions,
+      the packed low-bit values, a per-tile offset,
+      and the quantization metadata, scales and zero-points.
+      <break time="500ms"/>
+      The kernel follows a
+      <emphasis level="moderate">load-as-compressed, compute-as-dense</emphasis> strategy:
+      it loads the compact tiles from memory,
+      unpacks and dequantizes them into dense shared-memory tiles,
+      and then runs a standard Tensor-Core matrix-vector product.
+      <break time="500ms"/>
+      So sparsity is handled entirely on the <emphasis level="moderate">loading</emphasis> path,
+      where the memory savings are, while the compute stage stays dense and regular.
+      <break time="250ms"/>
+      That avoids the irregular memory access and control-flow divergence
+      that usually kill sparse execution.
+      This is exactly what a memory-bound decode stage needs.
+      <break time="900ms"/>
+
+      <!-- SLIDE 9 : Experimental setup -->
+      <bookmark mark="slide09"/>
+      Now to the evaluation.
+      Everything runs on a single <sub alias="A one hundred">A100</sub>
+      <sub alias="eighty gigabyte">80GB</sub>,
+      with custom <phoneme alphabet="ipa" ph="ˈkudə">CUDA</phoneme>
+      and <phoneme alphabet="ipa" ph="ˈtraɪtɑn">Triton</phoneme> kernels.
+      <break time="500ms"/>
+      For accuracy, we use the official LongBench pipeline on six representative tasks,
+      with <phoneme alphabet="ipa" ph="ˈlɑmə">Llama</phoneme> 3, 8 B Instruct as the main model,
+      plus <phoneme alphabet="ipa" ph="ˈlɑmə">Llama</phoneme> 2,
+      <phoneme alphabet="ipa" ph="mɪˈstrɑl">Mistral</phoneme>,
+      and <phoneme alphabet="ipa" ph="ˈkwɛn">Qwen</phoneme> 2.5.
+      <break time="300ms"/>
+      For efficiency, we measure end-to-end throughput and compression cost
+      at batch sizes one through eight.
+      <break time="500ms"/>
+      Our baselines are dense decoding,
+      a matched-budget uniform-sparsity baseline based on
+      <phoneme alphabet="ipa" ph="ˈmʌstəfɑr">MUSTAFAR</phoneme>,
+      and the sequential <phoneme alphabet="ipa" ph="ˈmʌstəfɑr">MUSTAFAR</phoneme>
+      plus <phoneme alphabet="ipa" ph="ˈkivi">KIVI</phoneme> pipeline,
+      which I'll call <say-as interpret-as="characters">M</say-as> plus
+      <say-as interpret-as="characters">K</say-as>.
+      <break time="250ms"/>
+      We test both sparse-only and joint sparse-quant settings at 50 and 70 percent.
+      <break time="900ms"/>
+
+      <!-- SLIDE 10 : Accuracy, sparse-only -->
+      <bookmark mark="slide10"/>
+      First, sparsity <emphasis level="moderate">alone</emphasis>,
+      to isolate the effect of budget allocation. No quantization yet.
+      <break time="500ms"/>
+      The takeaway is on the right.
+      Our differential policy is greater than or equal to uniform sparsity
+      in <emphasis level="moderate">every setting</emphasis>. It never hurts.
+      <break time="300ms"/>
+      And the gain is larger at the tighter 70 percent budget than at 50 percent.
+      <break time="300ms"/>
+      That confirms the intuition from the method:
+      token-level budget allocation matters most exactly when the budget is
+      <emphasis level="moderate">scarce</emphasis>.
+      <break time="900ms"/>
+
+      <!-- SLIDE 11 : Accuracy, joint sparse-quant, main result -->
+      <bookmark mark="slide11"/>
+      Now the main result: the <emphasis level="moderate">full</emphasis> joint sparse-quant pipeline
+      against the sequential <say-as interpret-as="characters">M</say-as> plus
+      <say-as interpret-as="characters">K</say-as> baseline, averaged over the six tasks.
+      <break time="500ms"/>
+      <say-as interpret-as="characters">JSQKV</say-as> wins in
+      <emphasis level="moderate">all four settings</emphasis>,
+      and, this is the key pattern, the gap <emphasis level="moderate">widens</emphasis>
+      as compression gets more aggressive.
+      <break time="300ms"/>
+      At the most aggressive setting, seventy-seventy with two-bit,
+      the average score jumps from
+      <emphasis level="moderate">39.83 to 43.12</emphasis>,
+      a gain of over three points.
+      <break time="500ms"/>
+      Why does <say-as interpret-as="characters">JSQKV</say-as> win?
+      Because jointly aligning sparsity, quantization, and execution
+      beats stacking two methods that were never designed to work together.
+      <break time="250ms"/>
+      The cross-model results tell the same story:
+      favorable overall, and strongest under tight budgets.
+      <break time="900ms"/>
+
+      <!-- SLIDE 12 : Efficiency -->
+      <bookmark mark="slide12"/>
+      And crucially, this quality holds up while delivering
+      <emphasis level="moderate">real speedup</emphasis>.
+      <break time="300ms"/>
+      On the left, end-to-end throughput versus batch size:
+      the compressed paths pull ahead of dense decoding,
+      with the clearest advantage in the small-to-medium batch regime.
+      <break time="250ms"/>
+      Overall, <say-as interpret-as="characters">JSQKV</say-as> improves end-to-end throughput
+      by up to <emphasis level="moderate">44 percent</emphasis> over dense decoding.
+      <break time="500ms"/>
+      On the right, compression statistics.
+      Compared to sparse-only <phoneme alphabet="ipa" ph="ˈmʌstəfɑr">MUSTAFAR</phoneme> 70,
+      our sparse-quant path pushes the compression ratio
+      from 2.09 times up to <emphasis level="moderate">3.48 times</emphasis>.
+      <break time="250ms"/>
+      And notably, it <emphasis level="moderate">also lowers</emphasis> the compression time,
+      from about 5,400 down to 4,300 milliseconds.
+      <break time="250ms"/>
+      So the more compact representation even cuts the write-back cost.
+      Better compression <emphasis level="moderate">and</emphasis> faster. Not a trade-off.
+      <break time="900ms"/>
+
+      <!-- SLIDE 13 : Conclusion -->
+      <bookmark mark="slide13"/>
+      To conclude.
+      Our central message is that <say-as interpret-as="characters">KV</say-as> cache compression
+      should be treated as a systems-and-algorithms
+      <emphasis level="moderate">co-design</emphasis> problem,
+      not a simple composition of independent post-processing steps.
+      <break time="500ms"/>
+      <say-as interpret-as="characters">JSQKV</say-as> brings together four pieces:
+      differential sparsity, the dual-window online mechanism,
+      <phoneme alphabet="ipa" ph="ˈhædəmɑrd">Hadamard</phoneme>-stabilized
+      Per-Token-Tile quantization,
+      and the sparse-quant kernel that turns compression into speedup.
+      <break time="500ms"/>
+      And the headline numbers, on <phoneme alphabet="ipa" ph="ˈlɑmə">Llama</phoneme> 3, 8 B:
+      the average score improves from
+      <emphasis level="moderate">39.83 to 43.12</emphasis>,
+      throughput improves by <emphasis level="moderate">44 percent</emphasis>,
+      and the <say-as interpret-as="characters">KV</say-as> cache is compressed by
+      <emphasis level="moderate">3.48 times</emphasis>, all at the same time.
+      <break time="900ms"/>
+
+      <!-- SLIDE 14 : Thank you -->
+      <bookmark mark="slide14"/>
+      That's <say-as interpret-as="characters">JSQKV</say-as>.
+      <break time="300ms"/>
+      Thank you very much for your attention.
+      I'd be happy to take your questions.
+
+    </prosody>
+  </voice>
+</speak>
