@@ -1,72 +1,58 @@
-Paper title:
+Paper Title
 JSQKV: Joint Sparsification and Quantization for KV-Cache Compression and Decode Acceleration
 
-Corresponding author:
+
+Corresponding Author’s name and email
+Xiaoli Gong, gongxiaoli@nankai.edu.cn
+
+
+List of all authors’ names
+Hao Zhang, Xiaoli Gong, Haoran Li, Huayou Su, Qingxia Chen, Jin Zhang
+
+
+Name details:
+Given Name,      Family Name
+Hao,             Zhang
+Xiaoli,          Gong
+Haoran,          Li
+Huayou,          Su
+Qingxia,         Chen
+Jin,             Zhang
+
+
+Affiliation details:
+Hao Zhang
+College of Computer Science, Nankai University, Tianjin, China
+
 Xiaoli Gong
+College of Computer Science, Nankai University, Tianjin, China
 
-Corresponding author's email address:
-gongxiaoli@nankai.edu.cn
+Haoran Li
+College of Computer Science, Nankai University, Tianjin, China
 
-Full author list in paper order:
-1. Hao Zhang
-2. Xiaoli Gong
-3. Haoran Li
-4. Huayou Su
-5. Qingxia Chen
-6. Jin Zhang
+Huayou Su
+National University of Defense Technology, Changsha, China
 
-Detailed author information:
+Qingxia Chen
+Qian Xuesen Laboratory of Space Technology, Beijing, China
 
-Author 1
-Full name as it should appear in the paper: Hao Zhang
-Given name(s): Hao
-Family name: Zhang
-Affiliation: College of Computer Science, Nankai University, Tianjin, China
-Email address: 2120230710@nankai.edu.cn
-ORCID: 0009-0001-1044-0312
-Corresponding author: No
+Jin Zhang
+College of Computer Science, Nankai University, Tianjin, China
 
-Author 2
-Full name as it should appear in the paper: Xiaoli Gong
-Given name(s): Xiaoli
-Family name: Gong
-Affiliation: College of Computer Science, Nankai University, Tianjin, China
-Email address: gongxiaoli@nankai.edu.cn
-ORCID: 0000-0002-9836-558X
-Corresponding author: Yes
 
-Author 3
-Full name as it should appear in the paper: Haoran Li
-Given name(s): Haoran
-Family name: Li
-Affiliation: College of Computer Science, Nankai University, Tianjin, China
-Email address: wanch_lhr@nankai.edu.cn
-ORCID:
-Corresponding author: No
+Email details:
+Hao Zhang, 2120230710@nankai.edu.cn
+Xiaoli Gong, gongxiaoli@nankai.edu.cn
+Haoran Li, wanch_lhr@nankai.edu.cn
+Huayou Su, shyou@nudt.edu.cn
+Qingxia Chen, chenqingxia_0882@163.com
+Jin Zhang, nkzhangjin@nankai.edu.cn
 
-Author 4
-Full name as it should appear in the paper: Huayou Su
-Given name(s): Huayou
-Family name: Su
-Affiliation: National University of Defense Technology, Changsha, China
-Email address: shyou@nudt.edu.cn
-ORCID:
-Corresponding author: No
 
-Author 5
-Full name as it should appear in the paper: Qingxia Chen
-Given name(s): Qingxia
-Family name: Chen
-Affiliation: Qian Xuesen Laboratory of Space Technology, Beijing, China
-Email address: chenqingxia_0882@163.com
-ORCID:
-Corresponding author: No
-
-Author 6
-Full name as it should appear in the paper: Jin Zhang
-Given name(s): Jin
-Family name: Zhang
-Affiliation: College of Computer Science, Nankai University, Tianjin, China
-Email address: nkzhangjin@nankai.edu.cn
-ORCID: 0000-0001-9086-1178
-Corresponding author: No
+ORCID details:
+Hao Zhang, 0009-0001-1044-0312
+Xiaoli Gong, 0000-0002-9836-558X
+Haoran Li, N/A
+Huayou Su, N/A
+Qingxia Chen, N/A
+Jin Zhang, 0000-0001-9086-1178
